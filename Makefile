@@ -8,7 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-.PHONY: build fmt verify release lint vendor check-vendor
+.PHONY: build fmt verify release lint vendor check-vendor helm-unittest
 
 GO_CMD ?= go
 GO_FMT ?= gofmt
@@ -77,6 +77,11 @@ check-modules: modules
 	@git diff --exit-code -- $$(find . -name go.mod -name go.sum)
 	@echo "- Checking if the go mod vendor dir is in sync..."
 	@git diff --exit-code -- $$(find . -name vendor)
+
+HELM_CHART_DIR := deployments/gpu-mock/helm/gpu-mock
+
+helm-unittest:
+	helm unittest $(HELM_CHART_DIR)
 
 .PHONY: generate
 generate:

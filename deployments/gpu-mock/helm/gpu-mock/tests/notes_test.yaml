@@ -1,0 +1,71 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+suite: NOTES.txt
+templates:
+  - templates/NOTES.txt
+tests:
+  # ── Snapshots ───────────────────────────────────────────────────────
+  - it: should match snapshot with default values
+    asserts:
+      - matchSnapshotRaw: {}
+
+  - it: should match snapshot with b200 profile
+    set:
+      gpu:
+        profile: b200
+        count: 4
+    asserts:
+      - matchSnapshotRaw: {}
+
+  # ── Assertions ──────────────────────────────────────────────────────
+  - it: should render NOTES with default profile and count
+    asserts:
+      - matchRegexRaw:
+          pattern: "Profile: a100"
+      - matchRegexRaw:
+          pattern: "GPUs per node: 8"
+      - matchRegexRaw:
+          pattern: "Driver version: 550.163.01"
+
+  - it: should render NOTES with h100 profile
+    set:
+      gpu:
+        profile: h100
+        count: 4
+    asserts:
+      - matchRegexRaw:
+          pattern: "Profile: h100"
+      - matchRegexRaw:
+          pattern: "GPUs per node: 4"
+      - matchRegexRaw:
+          pattern: "Driver version: 550.163.01"
+
+  - it: should render Blackwell driver version for b200
+    set:
+      gpu:
+        profile: b200
+        count: 8
+    asserts:
+      - matchRegexRaw:
+          pattern: "Driver version: 560.35.03"
+
+  - it: should render explicit driver version
+    set:
+      driverVersion: "999.99.99"
+    asserts:
+      - matchRegexRaw:
+          pattern: "Driver version: 999.99.99"
+
+  - it: should list available profiles
+    asserts:
+      - matchRegexRaw:
+          pattern: "a100, h100, b200, gb200, l40s, t4"
+
+  - it: should contain all three option sections
+    asserts:
+      - matchRegexRaw:
+          pattern: "OPTION A: NVIDIA Device Plugin"
+      - matchRegexRaw:
+          pattern: "OPTION B: NVIDIA DRA Driver"
+      - matchRegexRaw:
+          pattern: "OPTION C: GPU Operator"

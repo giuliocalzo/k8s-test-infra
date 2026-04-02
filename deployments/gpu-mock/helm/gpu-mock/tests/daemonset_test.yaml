@@ -1,0 +1,349 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+suite: DaemonSet
+templates:
+  - templates/daemonset.yaml
+tests:
+  # ── Snapshots ───────────────────────────────────────────────────────
+  - it: should match snapshot with default values
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with b200 profile
+    set:
+      gpu:
+        profile: b200
+        count: 4
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with all overrides
+    release:
+      name: custom
+      namespace: gpu-system
+    set:
+      fullnameOverride: gpu-mock-custom
+      image:
+        repository: custom-registry/gpu-mock
+        tag: v2.0.0
+        pullPolicy: Always
+      gpu:
+        profile: h100
+        count: 2
+      driverVersion: "555.55.55"
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      resources:
+        limits:
+          cpu: 500m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+    asserts:
+      - matchSnapshot: {}
+
+  # ── Assertions ──────────────────────────────────────────────────────
+  - it: should render a DaemonSet with default values
+    asserts:
+      - isKind:
+          of: DaemonSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-gpu-mock
+
+  - it: should include standard labels
+    asserts:
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: gpu-mock-0.1.0
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: gpu-mock
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "550.163.01"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: should set selector matchLabels
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: gpu-mock
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should set pod template labels
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: gpu-mock
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should use the correct service account
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-gpu-mock
+
+  - it: should render the default image
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/nvidia/gpu-mock:latest"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+
+  - it: should set the container as privileged
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.privileged
+          value: true
+
+  - it: should set the entrypoint command
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/scripts/entrypoint.sh"]
+
+  - it: should set preStop lifecycle hook
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value: ["/scripts/cleanup.sh"]
+
+  - it: should set default GPU_COUNT env var to 8
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GPU_COUNT
+            value: "8"
+
+  - it: should set default DRIVER_VERSION for non-Blackwell profile
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DRIVER_VERSION
+            value: "550.163.01"
+
+  - it: should derive Blackwell driver version for b200 profile
+    set:
+      gpu:
+        profile: b200
+        count: 8
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DRIVER_VERSION
+            value: "560.35.03"
+
+  - it: should derive Blackwell driver version for gb200 profile
+    set:
+      gpu:
+        profile: gb200
+        count: 8
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DRIVER_VERSION
+            value: "560.35.03"
+
+  - it: should use explicit driverVersion when provided
+    set:
+      driverVersion: "999.99.99"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DRIVER_VERSION
+            value: "999.99.99"
+
+  - it: should set NODE_NAME from fieldRef
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+
+  - it: should override GPU_COUNT
+    set:
+      gpu:
+        profile: a100
+        count: 4
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GPU_COUNT
+            value: "4"
+
+  - it: should mount all required volumes
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: host-nvidia-mock
+            mountPath: /host/var/lib/nvidia-mock
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: gpu-config
+            mountPath: /config
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: host-cdi
+            mountPath: /host/var/run/cdi
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: host-run-nvidia
+            mountPath: /host/run/nvidia
+
+  - it: should define all required volumes
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: host-nvidia-mock
+            hostPath:
+              path: /var/lib/nvidia-mock
+              type: DirectoryOrCreate
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: gpu-config
+            configMap:
+              name: RELEASE-NAME-gpu-mock-config
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: host-cdi
+            hostPath:
+              path: /var/run/cdi
+              type: DirectoryOrCreate
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: host-run-nvidia
+            hostPath:
+              path: /run/nvidia
+              type: DirectoryOrCreate
+
+  - it: should apply default tolerations
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            operator: Exists
+
+  - it: should not set nodeSelector by default
+    asserts:
+      - notExists:
+          path: spec.template.spec.nodeSelector
+
+  - it: should apply custom nodeSelector
+    set:
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["nvidia.com/gpu.present"]
+          value: "true"
+
+  - it: should apply custom tolerations
+    set:
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+
+  - it: should not set resources by default
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].resources
+
+  - it: should apply resource limits and requests
+    set:
+      resources:
+        limits:
+          cpu: 500m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 256Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 128Mi
+
+  - it: should override image settings
+    set:
+      image:
+        repository: custom-registry/gpu-mock
+        tag: v1.2.3
+        pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "custom-registry/gpu-mock:v1.2.3"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: should respect nameOverride
+    release:
+      name: my-release
+    set:
+      nameOverride: custom-name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-release-custom-name
+
+  - it: should respect fullnameOverride
+    set:
+      fullnameOverride: my-full-name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-full-name
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: my-full-name

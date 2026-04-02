@@ -1,0 +1,52 @@
+should match ClusterRole snapshot:
+  1: |
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      labels:
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/version: 550.163.01
+        helm.sh/chart: gpu-mock-0.1.0
+      name: RELEASE-NAME-gpu-mock
+    rules:
+      - apiGroups:
+          - ""
+        resources:
+          - nodes
+        verbs:
+          - get
+          - patch
+should match ClusterRoleBinding snapshot:
+  1: |
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      labels:
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/version: 550.163.01
+        helm.sh/chart: gpu-mock-0.1.0
+      name: RELEASE-NAME-gpu-mock
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: RELEASE-NAME-gpu-mock
+    subjects:
+      - kind: ServiceAccount
+        name: RELEASE-NAME-gpu-mock
+        namespace: NAMESPACE
+should match ServiceAccount snapshot:
+  1: |
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      labels:
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/version: 550.163.01
+        helm.sh/chart: gpu-mock-0.1.0
+      name: RELEASE-NAME-gpu-mock
