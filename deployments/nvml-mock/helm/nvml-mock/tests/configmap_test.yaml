@@ -1,0 +1,206 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+#
+# After modifying GPU profiles, regenerate snapshots:
+#   helm unittest -u deployments/nvml-mock/helm/nvml-mock
+suite: ConfigMap
+templates:
+  - templates/configmap.yaml
+tests:
+  # ── Snapshots ───────────────────────────────────────────────────────
+  - it: should match snapshot with default a100 profile
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with h100 profile
+    set:
+      gpu:
+        profile: h100
+        count: 8
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with b200 profile
+    set:
+      gpu:
+        profile: b200
+        count: 8
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with gb200 profile
+    set:
+      gpu:
+        profile: gb200
+        count: 8
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with l40s profile
+    set:
+      gpu:
+        profile: l40s
+        count: 8
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with t4 profile
+    set:
+      gpu:
+        profile: t4
+        count: 8
+    asserts:
+      - matchSnapshot: {}
+
+  # ── Assertions ──────────────────────────────────────────────────────
+  - it: should render a ConfigMap with default values
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-nvml-mock-config
+
+  - it: should include standard labels
+    asserts:
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: nvml-mock-0.1.0
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: nvml-mock
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: should contain config.yaml data key
+    asserts:
+      - exists:
+          path: data["config.yaml"]
+
+  - it: should load a100 profile by default
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "NVIDIA A100-SXM4-40GB"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "architecture: .ampere."
+
+  - it: should load h100 profile
+    set:
+      gpu:
+        profile: h100
+        count: 8
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "NVIDIA H100"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "architecture: .hopper."
+
+  - it: should load b200 profile
+    set:
+      gpu:
+        profile: b200
+        count: 8
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "NVIDIA B200"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "architecture: .blackwell."
+
+  - it: should load gb200 profile
+    set:
+      gpu:
+        profile: gb200
+        count: 8
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "NVIDIA GB200"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "architecture: .blackwell."
+
+  - it: should load l40s profile
+    set:
+      gpu:
+        profile: l40s
+        count: 8
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "NVIDIA L40S"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "architecture: .ada.lovelace."
+
+  - it: should load t4 profile
+    set:
+      gpu:
+        profile: t4
+        count: 8
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "NVIDIA T4"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "architecture: .turing."
+
+  - it: should use customConfig when provided
+    set:
+      gpu:
+        profile: a100
+        count: 2
+        customConfig: |
+          version: "1.0"
+          system:
+            driver_version: "custom"
+          device_defaults:
+            name: "Custom GPU"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "Custom GPU"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'driver_version: .custom.'
+
+  - it: should prefer customConfig over profile
+    set:
+      gpu:
+        profile: h100
+        count: 1
+        customConfig: |
+          version: "1.0"
+          device_defaults:
+            name: "Override GPU"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "Override GPU"
+
+  - it: should fail for unknown profile
+    set:
+      gpu:
+        profile: invalid-gpu
+        count: 1
+    asserts:
+      - failedTemplate:
+          errorMessage: 'Unknown GPU profile "invalid-gpu". Supported profiles: a100, h100, b200, gb200, l40s, t4. Or set gpu.customConfig with inline YAML.'
+
+  - it: should respect fullnameOverride in ConfigMap name
+    set:
+      fullnameOverride: custom-cm
+    asserts:
+      - equal:
+          path: metadata.name
+          value: custom-cm-config
