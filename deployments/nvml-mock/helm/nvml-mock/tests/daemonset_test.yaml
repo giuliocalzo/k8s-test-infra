@@ -22,9 +22,9 @@ tests:
       name: custom
       namespace: gpu-system
     set:
-      fullnameOverride: gpu-mock-custom
+      fullnameOverride: nvml-mock-custom
       image:
-        repository: custom-registry/gpu-mock
+        repository: custom-registry/nvml-mock
         tag: v2.0.0
         pullPolicy: Always
       gpu:
@@ -54,16 +54,16 @@ tests:
           of: DaemonSet
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-gpu-mock
+          value: RELEASE-NAME-nvml-mock
 
   - it: should include standard labels
     asserts:
       - equal:
           path: metadata.labels["helm.sh/chart"]
-          value: gpu-mock-0.1.0
+          value: nvml-mock-0.1.0
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
-          value: gpu-mock
+          value: nvml-mock
       - equal:
           path: metadata.labels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
@@ -78,7 +78,7 @@ tests:
     asserts:
       - equal:
           path: spec.selector.matchLabels["app.kubernetes.io/name"]
-          value: gpu-mock
+          value: nvml-mock
       - equal:
           path: spec.selector.matchLabels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
@@ -87,7 +87,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.metadata.labels["app.kubernetes.io/name"]
-          value: gpu-mock
+          value: nvml-mock
       - equal:
           path: spec.template.metadata.labels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
@@ -96,13 +96,13 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
-          value: RELEASE-NAME-gpu-mock
+          value: RELEASE-NAME-nvml-mock
 
   - it: should render the default image
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/nvidia/gpu-mock:latest"
+          value: "ghcr.io/nvidia/nvml-mock:latest"
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
@@ -202,8 +202,8 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
-            name: host-nvidia-mock
-            mountPath: /host/var/lib/nvidia-mock
+            name: host-nvml-mock
+            mountPath: /host/var/lib/nvml-mock
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
@@ -225,16 +225,16 @@ tests:
       - contains:
           path: spec.template.spec.volumes
           content:
-            name: host-nvidia-mock
+            name: host-nvml-mock
             hostPath:
-              path: /var/lib/nvidia-mock
+              path: /var/lib/nvml-mock
               type: DirectoryOrCreate
       - contains:
           path: spec.template.spec.volumes
           content:
             name: gpu-config
             configMap:
-              name: RELEASE-NAME-gpu-mock-config
+              name: RELEASE-NAME-nvml-mock-config
       - contains:
           path: spec.template.spec.volumes
           content:
@@ -316,13 +316,13 @@ tests:
   - it: should override image settings
     set:
       image:
-        repository: custom-registry/gpu-mock
+        repository: custom-registry/nvml-mock
         tag: v1.2.3
         pullPolicy: Always
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "custom-registry/gpu-mock:v1.2.3"
+          value: "custom-registry/nvml-mock:v1.2.3"
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: Always

@@ -6,10 +6,10 @@ should match ClusterRole snapshot:
       labels:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
-        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/name: nvml-mock
         app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: gpu-mock-0.1.0
-      name: RELEASE-NAME-gpu-mock
+        helm.sh/chart: nvml-mock-0.1.0
+      name: RELEASE-NAME-nvml-mock
     rules:
       - apiGroups:
           - ""
@@ -26,17 +26,17 @@ should match ClusterRoleBinding snapshot:
       labels:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
-        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/name: nvml-mock
         app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: gpu-mock-0.1.0
-      name: RELEASE-NAME-gpu-mock
+        helm.sh/chart: nvml-mock-0.1.0
+      name: RELEASE-NAME-nvml-mock
     roleRef:
       apiGroup: rbac.authorization.k8s.io
       kind: ClusterRole
-      name: RELEASE-NAME-gpu-mock
+      name: RELEASE-NAME-nvml-mock
     subjects:
       - kind: ServiceAccount
-        name: RELEASE-NAME-gpu-mock
+        name: RELEASE-NAME-nvml-mock
         namespace: NAMESPACE
 should match ServiceAccount snapshot:
   1: |
@@ -46,7 +46,7 @@ should match ServiceAccount snapshot:
       labels:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
-        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/name: nvml-mock
         app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: gpu-mock-0.1.0
-      name: RELEASE-NAME-gpu-mock
+        helm.sh/chart: nvml-mock-0.1.0
+      name: RELEASE-NAME-nvml-mock

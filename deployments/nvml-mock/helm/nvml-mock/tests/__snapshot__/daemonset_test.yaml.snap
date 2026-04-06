@@ -6,20 +6,20 @@ should match snapshot with all overrides:
       labels:
         app.kubernetes.io/instance: custom
         app.kubernetes.io/managed-by: Helm
-        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/name: nvml-mock
         app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: gpu-mock-0.1.0
-      name: gpu-mock-custom
+        helm.sh/chart: nvml-mock-0.1.0
+      name: nvml-mock-custom
     spec:
       selector:
         matchLabels:
           app.kubernetes.io/instance: custom
-          app.kubernetes.io/name: gpu-mock
+          app.kubernetes.io/name: nvml-mock
       template:
         metadata:
           labels:
             app.kubernetes.io/instance: custom
-            app.kubernetes.io/name: gpu-mock
+            app.kubernetes.io/name: nvml-mock
         spec:
           containers:
             - command:
@@ -33,14 +33,14 @@ should match snapshot with all overrides:
                   valueFrom:
                     fieldRef:
                       fieldPath: spec.nodeName
-              image: custom-registry/gpu-mock:v2.0.0
+              image: custom-registry/nvml-mock:v2.0.0
               imagePullPolicy: Always
               lifecycle:
                 preStop:
                   exec:
                     command:
                       - /scripts/cleanup.sh
-              name: gpu-mock
+              name: nvml-mock
               resources:
                 limits:
                   cpu: 500m
@@ -51,8 +51,8 @@ should match snapshot with all overrides:
               securityContext:
                 privileged: true
               volumeMounts:
-                - mountPath: /host/var/lib/nvidia-mock
-                  name: host-nvidia-mock
+                - mountPath: /host/var/lib/nvml-mock
+                  name: host-nvml-mock
                 - mountPath: /config
                   name: gpu-config
                 - mountPath: /host/var/run/cdi
@@ -61,18 +61,18 @@ should match snapshot with all overrides:
                   name: host-run-nvidia
           nodeSelector:
             nvidia.com/gpu.present: "true"
-          serviceAccountName: gpu-mock-custom
+          serviceAccountName: nvml-mock-custom
           tolerations:
             - effect: NoSchedule
               key: nvidia.com/gpu
               operator: Exists
           volumes:
             - hostPath:
-                path: /var/lib/nvidia-mock
+                path: /var/lib/nvml-mock
                 type: DirectoryOrCreate
-              name: host-nvidia-mock
+              name: host-nvml-mock
             - configMap:
-                name: gpu-mock-custom-config
+                name: nvml-mock-custom-config
               name: gpu-config
             - hostPath:
                 path: /var/run/cdi
@@ -90,20 +90,20 @@ should match snapshot with b200 profile:
       labels:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
-        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/name: nvml-mock
         app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: gpu-mock-0.1.0
-      name: RELEASE-NAME-gpu-mock
+        helm.sh/chart: nvml-mock-0.1.0
+      name: RELEASE-NAME-nvml-mock
     spec:
       selector:
         matchLabels:
           app.kubernetes.io/instance: RELEASE-NAME
-          app.kubernetes.io/name: gpu-mock
+          app.kubernetes.io/name: nvml-mock
       template:
         metadata:
           labels:
             app.kubernetes.io/instance: RELEASE-NAME
-            app.kubernetes.io/name: gpu-mock
+            app.kubernetes.io/name: nvml-mock
         spec:
           containers:
             - command:
@@ -117,35 +117,35 @@ should match snapshot with b200 profile:
                   valueFrom:
                     fieldRef:
                       fieldPath: spec.nodeName
-              image: ghcr.io/nvidia/gpu-mock:latest
+              image: ghcr.io/nvidia/nvml-mock:latest
               imagePullPolicy: IfNotPresent
               lifecycle:
                 preStop:
                   exec:
                     command:
                       - /scripts/cleanup.sh
-              name: gpu-mock
+              name: nvml-mock
               securityContext:
                 privileged: true
               volumeMounts:
-                - mountPath: /host/var/lib/nvidia-mock
-                  name: host-nvidia-mock
+                - mountPath: /host/var/lib/nvml-mock
+                  name: host-nvml-mock
                 - mountPath: /config
                   name: gpu-config
                 - mountPath: /host/var/run/cdi
                   name: host-cdi
                 - mountPath: /host/run/nvidia
                   name: host-run-nvidia
-          serviceAccountName: RELEASE-NAME-gpu-mock
+          serviceAccountName: RELEASE-NAME-nvml-mock
           tolerations:
             - operator: Exists
           volumes:
             - hostPath:
-                path: /var/lib/nvidia-mock
+                path: /var/lib/nvml-mock
                 type: DirectoryOrCreate
-              name: host-nvidia-mock
+              name: host-nvml-mock
             - configMap:
-                name: RELEASE-NAME-gpu-mock-config
+                name: RELEASE-NAME-nvml-mock-config
               name: gpu-config
             - hostPath:
                 path: /var/run/cdi
@@ -163,20 +163,20 @@ should match snapshot with default values:
       labels:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
-        app.kubernetes.io/name: gpu-mock
+        app.kubernetes.io/name: nvml-mock
         app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: gpu-mock-0.1.0
-      name: RELEASE-NAME-gpu-mock
+        helm.sh/chart: nvml-mock-0.1.0
+      name: RELEASE-NAME-nvml-mock
     spec:
       selector:
         matchLabels:
           app.kubernetes.io/instance: RELEASE-NAME
-          app.kubernetes.io/name: gpu-mock
+          app.kubernetes.io/name: nvml-mock
       template:
         metadata:
           labels:
             app.kubernetes.io/instance: RELEASE-NAME
-            app.kubernetes.io/name: gpu-mock
+            app.kubernetes.io/name: nvml-mock
         spec:
           containers:
             - command:
@@ -190,35 +190,35 @@ should match snapshot with default values:
                   valueFrom:
                     fieldRef:
                       fieldPath: spec.nodeName
-              image: ghcr.io/nvidia/gpu-mock:latest
+              image: ghcr.io/nvidia/nvml-mock:latest
               imagePullPolicy: IfNotPresent
               lifecycle:
                 preStop:
                   exec:
                     command:
                       - /scripts/cleanup.sh
-              name: gpu-mock
+              name: nvml-mock
               securityContext:
                 privileged: true
               volumeMounts:
-                - mountPath: /host/var/lib/nvidia-mock
-                  name: host-nvidia-mock
+                - mountPath: /host/var/lib/nvml-mock
+                  name: host-nvml-mock
                 - mountPath: /config
                   name: gpu-config
                 - mountPath: /host/var/run/cdi
                   name: host-cdi
                 - mountPath: /host/run/nvidia
                   name: host-run-nvidia
-          serviceAccountName: RELEASE-NAME-gpu-mock
+          serviceAccountName: RELEASE-NAME-nvml-mock
           tolerations:
             - operator: Exists
           volumes:
             - hostPath:
-                path: /var/lib/nvidia-mock
+                path: /var/lib/nvml-mock
                 type: DirectoryOrCreate
-              name: host-nvidia-mock
+              name: host-nvml-mock
             - configMap:
-                name: RELEASE-NAME-gpu-mock-config
+                name: RELEASE-NAME-nvml-mock-config
               name: gpu-config
             - hostPath:
                 path: /var/run/cdi

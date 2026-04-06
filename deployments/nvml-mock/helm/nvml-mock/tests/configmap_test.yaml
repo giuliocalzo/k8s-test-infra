@@ -1,5 +1,8 @@
 # Copyright 2026 NVIDIA CORPORATION
 # SPDX-License-Identifier: Apache-2.0
+#
+# After modifying GPU profiles, regenerate snapshots:
+#   helm unittest -u deployments/nvml-mock/helm/nvml-mock
 suite: ConfigMap
 templates:
   - templates/configmap.yaml
@@ -56,16 +59,16 @@ tests:
           of: ConfigMap
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-gpu-mock-config
+          value: RELEASE-NAME-nvml-mock-config
 
   - it: should include standard labels
     asserts:
       - equal:
           path: metadata.labels["helm.sh/chart"]
-          value: gpu-mock-0.1.0
+          value: nvml-mock-0.1.0
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
-          value: gpu-mock
+          value: nvml-mock
       - equal:
           path: metadata.labels["app.kubernetes.io/instance"]
           value: RELEASE-NAME

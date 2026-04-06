@@ -78,7 +78,7 @@ check-modules: modules
 	@echo "- Checking if the go mod vendor dir is in sync..."
 	@git diff --exit-code -- $$(find . -name vendor)
 
-HELM_CHART_DIR := deployments/gpu-mock/helm/gpu-mock
+HELM_CHART_DIR := deployments/nvml-mock/helm/nvml-mock
 
 helm-unittest:
 	helm unittest $(HELM_CHART_DIR)

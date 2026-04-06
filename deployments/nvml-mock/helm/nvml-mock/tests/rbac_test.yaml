@@ -28,17 +28,17 @@ tests:
           of: ServiceAccount
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-gpu-mock
+          value: RELEASE-NAME-nvml-mock
 
   - it: should include standard labels on ServiceAccount
     documentIndex: 0
     asserts:
       - equal:
           path: metadata.labels["helm.sh/chart"]
-          value: gpu-mock-0.1.0
+          value: nvml-mock-0.1.0
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
-          value: gpu-mock
+          value: nvml-mock
       - equal:
           path: metadata.labels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
@@ -54,7 +54,7 @@ tests:
           of: ClusterRole
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-gpu-mock
+          value: RELEASE-NAME-nvml-mock
 
   - it: should grant get and patch on nodes
     documentIndex: 1
@@ -71,10 +71,10 @@ tests:
     asserts:
       - equal:
           path: metadata.labels["helm.sh/chart"]
-          value: gpu-mock-0.1.0
+          value: nvml-mock-0.1.0
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
-          value: gpu-mock
+          value: nvml-mock
 
   # ── ClusterRoleBinding ──────────────────────────────────────────────
   - it: should create a ClusterRoleBinding
@@ -84,7 +84,7 @@ tests:
           of: ClusterRoleBinding
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-gpu-mock
+          value: RELEASE-NAME-nvml-mock
 
   - it: should bind to the correct ClusterRole
     documentIndex: 2
@@ -97,7 +97,7 @@ tests:
           value: ClusterRole
       - equal:
           path: roleRef.name
-          value: RELEASE-NAME-gpu-mock
+          value: RELEASE-NAME-nvml-mock
 
   - it: should reference the correct ServiceAccount subject
     documentIndex: 2
@@ -106,7 +106,7 @@ tests:
           path: subjects
           content:
             kind: ServiceAccount
-            name: RELEASE-NAME-gpu-mock
+            name: RELEASE-NAME-nvml-mock
             namespace: NAMESPACE
 
   - it: should include standard labels on ClusterRoleBinding
@@ -114,10 +114,10 @@ tests:
     asserts:
       - equal:
           path: metadata.labels["helm.sh/chart"]
-          value: gpu-mock-0.1.0
+          value: nvml-mock-0.1.0
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
-          value: gpu-mock
+          value: nvml-mock
 
   # ── Name overrides ─────────────────────────────────────────────────
   - it: should respect fullnameOverride across all RBAC resources
@@ -165,5 +165,5 @@ tests:
           path: subjects
           content:
             kind: ServiceAccount
-            name: RELEASE-NAME-gpu-mock
+            name: RELEASE-NAME-nvml-mock
             namespace: gpu-system
