@@ -1,0 +1,122 @@
+---
+name: release
+
+permissions: {}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'CHANGELOG.md'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.chart.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+      released: ${{ steps.check.outputs.released }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - name: Read chart version
+        id: chart
+        run: |
+          version=$(grep '^version:' deployments/nvml-mock/helm/nvml-mock/Chart.yaml | awk '{print $2}')
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Chart version: ${version}"
+
+      - name: Check if tag already exists
+        id: check
+        run: |
+          tag="v${{ steps.chart.outputs.version }}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "Tag ${tag} already exists — skipping release"
+          else
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${tag} not found — proceeding with release"
+          fi
+
+  release:
+    needs: check-version
+    if: needs.check-version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    env:
+      REGISTRY: ghcr.io
+      CHART_REPO: nvidia/charts
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Lint chart
+        run: helm lint deployments/nvml-mock/helm/nvml-mock
+
+      - name: Run helm unittest
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.3
+          helm unittest deployments/nvml-mock/helm/nvml-mock
+
+      - name: Package chart
+        run: helm package deployments/nvml-mock/helm/nvml-mock --destination .cr-release-packages
+
+      - name: Push chart to OCI registry
+        run: helm push .cr-release-packages/nvml-mock-${{ needs.check-version.outputs.version }}.tgz oci://${{ env.REGISTRY }}/${{ env.CHART_REPO }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@c56c2d3e59e4281cc41dea2217323ba5694b171e # v3.8.0
+
+      - name: Sign chart package
+        run: |
+          cosign sign-blob --yes \
+            --output-signature .cr-release-packages/nvml-mock-${{ needs.check-version.outputs.version }}.tgz.sig \
+            --output-certificate .cr-release-packages/nvml-mock-${{ needs.check-version.outputs.version }}.tgz.cert \
+            .cr-release-packages/nvml-mock-${{ needs.check-version.outputs.version }}.tgz
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+
+      - name: Create Git tag
+        run: |
+          git tag ${{ needs.check-version.outputs.tag }}
+          git push origin ${{ needs.check-version.outputs.tag }}
+
+      - name: Extract CHANGELOG for release
+        id: changelog
+        run: |
+          version="${{ needs.check-version.outputs.version }}"
+          # Extract the section for this version from CHANGELOG.md
+          awk -v ver="${version}" '
+            /^## \[?v?'"${version}"'\]?/ { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "Release ${version}" > /tmp/release-notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2
+        with:
+          tag_name: ${{ needs.check-version.outputs.tag }}
+          name: ${{ needs.check-version.outputs.tag }}
+          body_path: /tmp/release-notes.md
+          files: |
+            .cr-release-packages/nvml-mock-${{ needs.check-version.outputs.version }}.tgz
+            .cr-release-packages/nvml-mock-${{ needs.check-version.outputs.version }}.tgz.sig
+            .cr-release-packages/nvml-mock-${{ needs.check-version.outputs.version }}.tgz.cert
