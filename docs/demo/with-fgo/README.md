@@ -14,50 +14,25 @@ shim.
 - fake-gpu-operator Helm chart (see
   [Run:ai fake-gpu-operator docs](https://github.com/run-ai/fake-gpu-operator))
 
-## Step 1 -- Create a 4-node Kind cluster
+## Step 1 -- Create a Kind cluster
 
 ```bash
-cat <<EOF | kind create cluster --name nvml-mock-fgo-demo --config=-
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-  - role: control-plane
-  - role: worker
-  - role: worker
-  - role: worker
-EOF
+kind create cluster --name nvml-mock-fgo-demo --config=docs/demo/kind.yaml
 ```
 
-## Step 2 -- Build and load the nvml-mock image
+## Step 2 (Optional) -- Build and load the nvml-mock image
 
 ```bash
 docker build -t nvml-mock:demo -f deployments/nvml-mock/Dockerfile .
 kind load docker-image nvml-mock:demo --name nvml-mock-fgo-demo
 ```
 
-## Step 3 -- Label worker nodes
+> **Note:** This step is only needed if you want to test local changes. If skipped, the chart defaults to `ghcr.io/nvidia/nvml-mock:latest`.
 
-Assign each worker to a pool. The first worker uses the `integration` pool
-(handled by nvml-mock). The remaining workers use the `scale` pool (handled
-by FGO).
-
-```bash
-WORKERS=($(kubectl get nodes --no-headers -o custom-columns=":metadata.name" \
-  | grep -v control-plane))
-
-kubectl label node "${WORKERS[0]}" run.ai/simulated-gpu-node-pool=integration --overwrite
-
-for node in "${WORKERS[@]:1}"; do
-  kubectl label node "${node}" run.ai/simulated-gpu-node-pool=scale --overwrite
-done
-```
-
-## Step 4 -- Install nvml-mock
+## Step 3 -- Install nvml-mock
 
 ```bash
 helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
-  --set image.repository=nvml-mock \
-  --set image.tag=demo \
   --set integrations.fakeGpuOperator.enabled=true \
   --set gpu.profile=h100 \
   --set gpu.count=8 \
@@ -65,53 +40,35 @@ helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
   --wait --timeout 120s
 ```
 
-## Step 5 -- Install fake-gpu-operator
+> **Tip:** To use the locally built image from Step 2, add `--set image.repository=nvml-mock --set image.tag=demo` to the command above.
+
+## Step 4 -- Install fake-gpu-operator
 
 Follow the official FGO installation instructions. A minimal example:
 
 ```bash
-helm repo add run-ai https://run-ai.github.io/fake-gpu-operator
-helm repo update
 
-helm install fake-gpu-operator run-ai/fake-gpu-operator \
-  --wait --timeout 120s
-```
-
-## Step 6 -- Configure topology
-
-Create a topology ConfigMap that tells FGO which backend each pool uses.
-The `integration` pool uses `backend: mock` (nvml-mock provides the NVML
-shim), and the `scale` pool uses `backend: fake` (FGO provides the shim).
-
-```bash
-kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: fake-gpu-operator-topology
-  namespace: gpu-operator
-data:
-  topology.yaml: |
-    nodeGroups:
-      - name: integration
+helm upgrade --install gpu-operator  oci://ghcr.io/run-ai/fake-gpu-operator/fake-gpu-operator \
+  -n gpu-operator --create-namespace \
+  --wait --timeout 120s  -f - <<EOF
+topology:
+    nodePools:
+      integration:
         backend: mock
-        nodeSelector:
-          run.ai/simulated-gpu-node-pool: "integration"
         gpuCount: 8
-        gpuModel: NVIDIA H100 80GB HBM3
-        gpuMemory: 80Gi
-
-      - name: scale
+        gpuProfile: h100
+      scale:
         backend: fake
-        nodeSelector:
-          run.ai/simulated-gpu-node-pool: "scale"
         gpuCount: 8
-        gpuModel: NVIDIA H100 80GB HBM3
-        gpuMemory: 80Gi
+        gpuProfile: h100
 EOF
 ```
 
-## Step 7 -- Verify
+The topology is passed inline via Helm values above. The `integration` pool
+uses `backend: mock` (nvml-mock provides the NVML shim), while the `scale`
+pool uses `backend: fake` (FGO provides the shim).
+
+## Step 5 -- Verify
 
 ### Integration pool (nvml-mock)
 
