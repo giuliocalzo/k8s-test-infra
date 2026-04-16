@@ -20,17 +20,10 @@ info() { echo "==> $*"; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
 ###############################################################################
-# Step 1 -- Create a 3-node Kind cluster
+# Step 1 -- Create a Kind cluster
 ###############################################################################
 info "Creating Kind cluster: ${CLUSTER_NAME}"
-cat <<EOF | kind create cluster --name "${CLUSTER_NAME}" --config=-
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-  - role: control-plane
-  - role: worker
-  - role: worker
-EOF
+kind create cluster --name "${CLUSTER_NAME}" --config=$REPO_ROOT/docs/demo/kind.yaml
 
 ###############################################################################
 # Step 2 -- Build the nvml-mock image
@@ -45,26 +38,7 @@ info "Loading image into Kind cluster"
 kind load docker-image "${IMAGE_NAME}" --name "${CLUSTER_NAME}"
 
 ###############################################################################
-# Step 4 -- Label worker nodes
-###############################################################################
-info "Labelling worker nodes"
-WORKERS=($(kubectl get nodes --no-headers -o custom-columns=":metadata.name" \
-  | grep -v control-plane))
-
-if [[ ${#WORKERS[@]} -lt 1 ]]; then
-  fail "No worker nodes found"
-fi
-
-# First worker: integration pool (served by nvml-mock).
-kubectl label node "${WORKERS[0]}" run.ai/simulated-gpu-node-pool=integration --overwrite
-
-# Remaining workers: scale pool.
-for node in "${WORKERS[@]:1}"; do
-  kubectl label node "${node}" run.ai/simulated-gpu-node-pool=scale --overwrite
-done
-
-###############################################################################
-# Step 5 -- Install nvml-mock via Helm
+# Step 4 -- Install nvml-mock via Helm
 ###############################################################################
 info "Installing nvml-mock Helm chart"
 helm install nvml-mock "${REPO_ROOT}/${CHART_PATH}" \
@@ -76,13 +50,13 @@ helm install nvml-mock "${REPO_ROOT}/${CHART_PATH}" \
   --wait --timeout 120s
 
 ###############################################################################
-# Step 6 -- Verify: DaemonSet rollout
+# Step 5 -- Verify: DaemonSet rollout
 ###############################################################################
 info "Waiting for DaemonSet rollout"
 kubectl rollout status daemonset/nvml-mock --timeout=60s
 
 ###############################################################################
-# Step 7 -- Verify: Profile ConfigMaps
+# Step 6 -- Verify: Profile ConfigMaps
 ###############################################################################
 info "Checking profile ConfigMaps"
 CM_COUNT=$(kubectl get configmaps -l run.ai/gpu-profile=true \
@@ -94,17 +68,20 @@ fi
 info "Found ${CM_COUNT} profile ConfigMap(s)"
 
 ###############################################################################
-# Step 8 -- Verify: nvidia-smi
+# Step 7 -- Verify: nvidia-smi
 ###############################################################################
 info "Running nvidia-smi inside a DaemonSet pod"
 POD=$(kubectl get pods -l app.kubernetes.io/name=nvml-mock -o jsonpath='{.items[0].metadata.name}')
 kubectl exec "${POD}" -- nvidia-smi
 
 ###############################################################################
-# Step 9 -- Show node labels
+# Step 8 -- Show node labels
 ###############################################################################
 info "Node labels"
 kubectl get nodes --show-labels
+
+WORKERS=($(kubectl get nodes --no-headers -o custom-columns=":metadata.name" \
+  | grep -v control-plane))
 
 ###############################################################################
 # Summary
