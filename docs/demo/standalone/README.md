@@ -7,15 +7,13 @@ consumers expect.
 
 ## What it does
 
-1. Creates a 3-node Kind cluster (`nvml-mock-demo`: 1 control-plane, 2 workers).
+1. Creates a Kind cluster (`nvml-mock-demo`: 1 control-plane, 3 workers).
 2. Builds the `nvml-mock:demo` container image from the repository root.
 3. Loads the image into the Kind cluster.
-4. Labels worker nodes with `run.ai/simulated-gpu-node-pool` to simulate
-   FGO topology (first worker gets `integration`, remaining workers get `scale`).
-5. Installs the nvml-mock Helm chart with
+4. Installs the nvml-mock Helm chart with
    `integrations.fakeGpuOperator.enabled=true`, an H100 profile, and 8 GPUs
    per node.
-6. Verifies the deployment:
+5. Verifies the deployment:
    - DaemonSet pods are running on all workers.
    - Six GPU profile ConfigMaps are created (one per profile field group).
    - `nvidia-smi` runs successfully inside a pod.

@@ -14,6 +14,8 @@
 package engine
 
 import (
+	"fmt"
+	"os"
 	"sync"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
@@ -78,9 +80,20 @@ func (e *Engine) Init() nvml.Return {
 		return nvml.ERROR_UNKNOWN
 	}
 
+	// Detect which GPU device nodes exist. In containers where CDI injects
+	// only the allocated GPUs (e.g. /dev/nvidia0 but not /dev/nvidia1-7),
+	// filter the visible device set to match. This mimics real NVML behavior
+	// where cgroup device permissions limit GPU visibility per container.
+	server.visibleDevices = detectVisibleDevices(e.config.NumDevices)
+
 	e.server = server
 	e.initCount = 1
-	debugLog("[ENGINE] Initialized with %d devices\n", e.config.NumDevices)
+
+	visibleCount := e.config.NumDevices
+	if server.visibleDevices != nil {
+		visibleCount = len(server.visibleDevices)
+	}
+	debugLog("[ENGINE] Initialized with %d devices (%d visible)\n", e.config.NumDevices, visibleCount)
 	return nvml.SUCCESS
 }
 
@@ -150,7 +163,10 @@ func (e *Engine) createDevicesFromYAML(server *MockServer, base *dgxa100.Server)
 	}
 }
 
-// createDefaultDevices creates devices with default/env configuration (legacy mode)
+// createDefaultDevices creates devices with default/env configuration (legacy mode).
+// Uses deterministic UUIDs and PCI bus IDs so that multiple processes loading the
+// library for the same device index see identical identifiers -- critical for shared
+// GPU scenarios where two pods must agree on the UUID of a shared device.
 func (e *Engine) createDefaultDevices(server *MockServer, base *dgxa100.Server) {
 	debugLog("[ENGINE] Creating devices with default config\n")
 
@@ -162,13 +178,16 @@ func (e *Engine) createDefaultDevices(server *MockServer, base *dgxa100.Server) 
 			continue
 		}
 
-		// Create configurable device with nil config (uses defaults)
+		// Deterministic UUID and PCI bus ID based on device index.
+		uuid := fmt.Sprintf("GPU-00000000-0000-0000-0000-%012d", i)
+		pciBusID := fmt.Sprintf("00000000:%02X:00.0", i+1)
+
 		server.configurableDevices[i] = NewConfigurableDevice(
 			i,
 			baseDevice,
 			nil, // No YAML config
-			"",  // Use default UUID
-			"",  // Use default PCI bus ID
+			uuid,
+			pciBusID,
 			i,   // Minor number = index
 			nil, // No NVLink config
 		)
@@ -177,9 +196,14 @@ func (e *Engine) createDefaultDevices(server *MockServer, base *dgxa100.Server) 
 
 // applySystemConfig applies system-level configuration
 func (e *Engine) applySystemConfig(server *MockServer) {
-	// Override device count
+	// Override device count. If device visibility filtering is active
+	// (container has only a subset of /dev/nvidia* nodes), return the
+	// filtered count instead of the total configured count.
 	numDevices := e.config.NumDevices
 	server.DeviceGetCountFunc = func() (int, nvml.Return) {
+		if server.visibleDevices != nil {
+			return len(server.visibleDevices), nvml.SUCCESS
+		}
 		if numDevices <= MaxDevices {
 			return numDevices, nvml.SUCCESS
 		}
@@ -394,6 +418,14 @@ func (e *Engine) GetConfig() *Config {
 	return e.config
 }
 
+// SetVisibleDevicesForTesting sets the visible device mapping on an initialized
+// engine's server. Pass nil to disable filtering. Only use in tests.
+func (e *Engine) SetVisibleDevicesForTesting(visible []int) {
+	if e.server != nil {
+		e.server.visibleDevices = visible
+	}
+}
+
 // ResetForTesting resets the engine singleton for testing purposes.
 // This clears all cached state including config cache.
 // WARNING: Only use in tests! Not thread-safe during concurrent access.
@@ -406,4 +438,43 @@ func ResetForTesting() {
 	engineInstance = nil
 
 	debugLog("[ENGINE] Reset for testing\n")
+}
+
+// detectVisibleDevices scans for /dev/nvidia<N> device nodes and returns a
+// slice mapping visible indices to actual device indices. This mimics real
+// NVML behavior where cgroup device permissions limit which GPUs a container
+// can see.
+//
+// Returns nil if ALL device nodes exist (no filtering needed) or if none
+// exist (host context where /dev/nvidia* may not be present but NVML should
+// still work).
+func detectVisibleDevices(numDevices int) []int {
+	return detectVisibleDevicesAt("/dev/nvidia%d", numDevices)
+}
+
+// detectVisibleDevicesAt is the testable core of detectVisibleDevices.
+// pathFmt is a printf format that takes the device index (e.g. "/dev/nvidia%d").
+func detectVisibleDevicesAt(pathFmt string, numDevices int) []int {
+	var present []int
+	var absent int
+
+	for i := 0; i < numDevices && i < MaxDevices; i++ {
+		path := fmt.Sprintf(pathFmt, i)
+		if _, err := os.Stat(path); err == nil {
+			present = append(present, i)
+		} else {
+			absent++
+		}
+	}
+
+	// No filtering if all devices exist or none exist.
+	// "None exist" handles the host/driver-plugin case where /dev/nvidia*
+	// nodes are not at /dev/ but the library should still expose all devices.
+	if absent == 0 || len(present) == 0 {
+		return nil
+	}
+
+	debugLog("[ENGINE] Device visibility filtering: %d of %d GPUs visible (by /dev/nvidia* presence)\n",
+		len(present), numDevices)
+	return present
 }
