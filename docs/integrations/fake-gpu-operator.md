@@ -70,7 +70,7 @@ Together, they enable **mixed clusters** where a small set of real nodes run nvm
 Enable the FGO integration flag when installing the Helm chart. This creates GPU profile ConfigMaps that FGO can discover and use for its topology.
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set integrations.fakeGpuOperator.enabled=true
 ```
 
@@ -153,7 +153,7 @@ integrations:
 Install with the override:
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   -f values.yaml
 ```
 
@@ -177,7 +177,7 @@ fakeGpuOperator:
 If the value is missing or `false`, upgrade the release with the flag enabled:
 
 ```bash
-helm upgrade nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm upgrade nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set integrations.fakeGpuOperator.enabled=true
 ```
 
