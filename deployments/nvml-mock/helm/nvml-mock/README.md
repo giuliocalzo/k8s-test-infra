@@ -69,14 +69,14 @@ kind load docker-image nvml-mock:local --name nvml-mock-test
 **With published image:**
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --wait --timeout 120s
 ```
 
 **With locally built image:**
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   --wait --timeout 120s
@@ -152,14 +152,14 @@ kind load docker-image nvml-mock:local --name nvml-mock-dra
 **With published image:**
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --wait --timeout 120s
 ```
 
 **With locally built image:**
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   --wait --timeout 120s
@@ -278,14 +278,14 @@ kind load docker-image nvml-mock:local --name nvml-mock-operator
 **With published image:**
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --wait --timeout 120s
 ```
 
 **With locally built image:**
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   --wait --timeout 120s
@@ -378,13 +378,13 @@ sleep 5
 **With published image:**
 
 ```bash
-helm install nvml-mock-a100 deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock-a100 oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set gpu.profile=a100 \
   --set gpu.count=4 \
   --set "nodeSelector.nvml-mock/profile=a100" \
   --wait --timeout 120s
 
-helm install nvml-mock-t4 deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock-t4 oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set gpu.profile=t4 \
   --set gpu.count=2 \
   --set "nodeSelector.nvml-mock/profile=t4" \
@@ -394,7 +394,7 @@ helm install nvml-mock-t4 deployments/nvml-mock/helm/nvml-mock \
 **With locally built image:**
 
 ```bash
-helm install nvml-mock-a100 deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock-a100 oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   --set gpu.profile=a100 \
@@ -402,7 +402,7 @@ helm install nvml-mock-a100 deployments/nvml-mock/helm/nvml-mock \
   --set "nodeSelector.nvml-mock/profile=a100" \
   --wait --timeout 120s
 
-helm install nvml-mock-t4 deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock-t4 oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   --set gpu.profile=t4 \
@@ -453,7 +453,7 @@ fake-gpu-operator handles KWOK virtual nodes.
 ### Enable Profile Discovery
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set integrations.fakeGpuOperator.enabled=true
 ```
 
@@ -476,7 +476,7 @@ nvml-mock-profile-t4              1      10s
 ### Custom Labels
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set integrations.fakeGpuOperator.enabled=true \
   --set 'integrations.fakeGpuOperator.profileLabels.my-org/gpu-profile=true'
 ```
@@ -506,13 +506,13 @@ Select a profile with `--set gpu.profile=<name>`:
 
 ```bash
 # Deploy as an 8-GPU H100 node
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   --set gpu.profile=h100
 
 # Deploy as a 4-GPU B200 node
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   --set gpu.profile=b200 \
@@ -557,7 +557,7 @@ For GPU types not covered by built-in profiles, provide your own config YAML.
 Create a YAML file following the profile format, then pass it at install time:
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   --set-file gpu.customConfig=my-custom-gpus.yaml
@@ -598,7 +598,7 @@ gpu:
 ```
 
 ```bash
-helm install nvml-mock deployments/nvml-mock/helm/nvml-mock \
+helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
   --set image.repository=nvml-mock \
   --set image.tag=local \
   -f custom-values.yaml
