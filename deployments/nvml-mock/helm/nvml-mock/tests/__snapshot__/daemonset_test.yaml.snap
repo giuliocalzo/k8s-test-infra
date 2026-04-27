@@ -33,6 +33,10 @@ should match snapshot with all overrides:
                   valueFrom:
                     fieldRef:
                       fieldPath: spec.nodeName
+                - name: LD_PRELOAD
+                  value: /usr/local/lib/libibmocksys.so.1
+                - name: MOCK_IB_ROOT
+                  value: /var/lib/nvml-mock/ib
               image: custom-registry/nvml-mock:v2.0.0
               imagePullPolicy: Always
               lifecycle:
@@ -52,6 +56,8 @@ should match snapshot with all overrides:
                 privileged: true
               volumeMounts:
                 - mountPath: /host/var/lib/nvml-mock
+                  name: host-nvml-mock
+                - mountPath: /var/lib/nvml-mock
                   name: host-nvml-mock
                 - mountPath: /config
                   name: gpu-config
@@ -117,6 +123,10 @@ should match snapshot with b200 profile:
                   valueFrom:
                     fieldRef:
                       fieldPath: spec.nodeName
+                - name: LD_PRELOAD
+                  value: /usr/local/lib/libibmocksys.so.1
+                - name: MOCK_IB_ROOT
+                  value: /var/lib/nvml-mock/ib
               image: ghcr.io/nvidia/nvml-mock:latest
               imagePullPolicy: IfNotPresent
               lifecycle:
@@ -129,6 +139,8 @@ should match snapshot with b200 profile:
                 privileged: true
               volumeMounts:
                 - mountPath: /host/var/lib/nvml-mock
+                  name: host-nvml-mock
+                - mountPath: /var/lib/nvml-mock
                   name: host-nvml-mock
                 - mountPath: /config
                   name: gpu-config
@@ -190,6 +202,10 @@ should match snapshot with default values:
                   valueFrom:
                     fieldRef:
                       fieldPath: spec.nodeName
+                - name: LD_PRELOAD
+                  value: /usr/local/lib/libibmocksys.so.1
+                - name: MOCK_IB_ROOT
+                  value: /var/lib/nvml-mock/ib
               image: ghcr.io/nvidia/nvml-mock:latest
               imagePullPolicy: IfNotPresent
               lifecycle:
@@ -202,6 +218,8 @@ should match snapshot with default values:
                 privileged: true
               volumeMounts:
                 - mountPath: /host/var/lib/nvml-mock
+                  name: host-nvml-mock
+                - mountPath: /var/lib/nvml-mock
                   name: host-nvml-mock
                 - mountPath: /config
                   name: gpu-config
