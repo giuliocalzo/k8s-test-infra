@@ -119,11 +119,14 @@ tests:
           path: spec.template.spec.containers[0].command
           value: ["/scripts/entrypoint.sh"]
 
+  # The preStop hook is a Go binary, not a shell script: the image ships no
+  # kubectl, and exec.command is an argv array with no shell, so NODE_NAME
+  # reaches it through the container env set above.
   - it: should set preStop lifecycle hook
     asserts:
       - equal:
           path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
-          value: ["/scripts/cleanup.sh"]
+          value: ["/usr/local/bin/nvml-mock-node", "teardown"]
 
   - it: should set default GPU_COUNT env var to 8
     asserts:

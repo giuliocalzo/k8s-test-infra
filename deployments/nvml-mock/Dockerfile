@@ -33,10 +33,10 @@ RUN mkdir -p /out \
     && go build -mod=vendor -o /out/nvidia-imex-ctl ./cmd/fake-imex/ctl \
     && go build -mod=vendor -o /out/nv-fabricmanager     ./cmd/fake-fabricmanager/daemon \
     && go build -mod=vendor -o /out/nv-fabricmanager-ctl ./cmd/fake-fabricmanager/ctl \
-    && go build -mod=vendor -o /out/check-fabric    ./cmd/check-fabric
+    && go build -mod=vendor -o /out/check-fabric    ./cmd/check-fabric \
+    && go build -mod=vendor -o /out/nvml-mock-node ./cmd/nvml-mock-node
 
 FROM debian:bookworm-slim
-ARG KUBECTL_VERSION=v1.36.1
 ARG TARGETARCH
 COPY --from=builder /src/pkg/gpu/mocknvml/libnvidia-ml.so.* /usr/local/lib/
 COPY --from=builder /src/pkg/gpu/mockcuda/libcuda.so.* /usr/local/lib/
@@ -49,6 +49,10 @@ COPY --from=builder /out/nvml-mock-nri /usr/local/bin/nvml-mock-nri
 COPY --from=builder /out/nvml-mock-ctl /usr/local/bin/nvml-mock-ctl
 COPY --from=builder /out/render-pci-sysfs /usr/local/bin/render-pci-sysfs
 COPY --from=builder /out/render-imex-procdevices /usr/local/bin/render-imex-procdevices
+# Node lifecycle: `label` from setup.sh, `teardown` from the DaemonSet's preStop
+# hook. Replaces the kubectl binary this image used to carry for two label
+# writes; RBAC is unchanged (nodes: get, patch).
+COPY --from=builder /out/nvml-mock-node /usr/local/bin/nvml-mock-node
 # Fake IMEX binaries used for ComputeDomain simulation on KIND. Installed
 # at the same paths the upstream compute-domain-daemon expects in $PATH,
 # so the thin daemon image layer (Dockerfile.compute-domain-daemon) can
@@ -80,13 +84,6 @@ RUN set -eux; \
     # but keep an explicit mkdir as a belt-and-braces guarantee so the
     # warning never appears even if the providers package is purged. \
     mkdir -p /etc/libibverbs.d; \
-    curl -fsSLo /usr/local/bin/kubectl \
-      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl"; \
-    curl -fsSLo /tmp/kubectl.sha256 \
-      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl.sha256"; \
-    echo "$(cat /tmp/kubectl.sha256)  /usr/local/bin/kubectl" | sha256sum --check; \
-    chmod +x /usr/local/bin/kubectl; \
-    rm /tmp/kubectl.sha256; \
     # Extract just the nvidia-smi binary from nvidia-utils (Ubuntu 22.04 repo:
     # glibc 2.35, runs on bookworm). The 580 branch renders the full GB200/GB300
     # NVLink5 surface (`nvlink -e/-info/-gLowPwrInfo/-gLWidth`); older binaries

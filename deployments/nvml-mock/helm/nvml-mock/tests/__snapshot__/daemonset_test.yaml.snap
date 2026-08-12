@@ -73,7 +73,8 @@ should match snapshot with all overrides:
                 preStop:
                   exec:
                     command:
-                      - /scripts/cleanup.sh
+                      - /usr/local/bin/nvml-mock-node
+                      - teardown
               name: nvml-mock
               ports:
                 - containerPort: 18515
@@ -216,7 +217,8 @@ should match snapshot with b200 profile:
                 preStop:
                   exec:
                     command:
-                      - /scripts/cleanup.sh
+                      - /usr/local/bin/nvml-mock-node
+                      - teardown
               name: nvml-mock
               ports:
                 - containerPort: 18515
@@ -346,7 +348,8 @@ should match snapshot with default values:
                 preStop:
                   exec:
                     command:
-                      - /scripts/cleanup.sh
+                      - /usr/local/bin/nvml-mock-node
+                      - teardown
               name: nvml-mock
               ports:
                 - containerPort: 18515

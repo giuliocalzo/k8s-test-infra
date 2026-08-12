@@ -184,7 +184,7 @@ spec:
           lifecycle:
             preStop:
               exec:
-                command: ["/scripts/cleanup.sh"]
+                command: ["/usr/local/bin/nvml-mock-node", "teardown"]
           volumeMounts:
             - name: host-nvml-mock
               mountPath: /host/var/lib/nvml-mock
