@@ -93,8 +93,17 @@ func TestRunIsIdempotentOnAnUntouchedRoot(t *testing.T) {
 }
 
 func TestRunRefusesARootThatIsNotAbsolute(t *testing.T) {
-	err := Run(Config{HostRoot: ""}, io.Discard)
-	require.ErrorContains(t, err, "refusing to wipe")
+	require.ErrorContains(t, Run(Config{HostRoot: ""}, io.Discard), "must be an absolute path")
+
+	// Seed a tree reachable through a relative root, so a check that fires too
+	// late — after the CDI specs have already been removed — fails here.
+	t.Chdir(t.TempDir())
+	spec := filepath.Join("host", "var/run/cdi", "nvidia.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(spec), 0o755))
+	require.NoError(t, os.WriteFile(spec, []byte("x"), 0o644))
+
+	require.ErrorContains(t, Run(Config{HostRoot: "host"}, io.Discard), "must be an absolute path")
+	require.FileExists(t, spec, "a rejected root must stop every step, not just the wipe")
 }
 
 func TestRunReportsEachRemoval(t *testing.T) {

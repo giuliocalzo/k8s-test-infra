@@ -138,35 +138,52 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	gate, err := labels.ParseGate(pciVendorLabel)
-	if err != nil {
-		fprintf(stderr, "ERROR: %v\n", err)
-		return 2
-	}
-	cfg := labels.Config{NodeName: nodeName, FeaturesDir: featuresDir, PCIVendorEnabled: gate}
+	// The gate is parsed per subcommand, not here: `label` treats a typo as
+	// fatal, while `teardown` must still unwind the filesystem state a bad value
+	// has no bearing on.
+	cfg := labels.Config{NodeName: nodeName, FeaturesDir: featuresDir}
 
 	if cmd == "label" {
-		return doLabel(cfg, stdout, stderr)
+		return doLabel(cfg, pciVendorLabel, stdout, stderr)
 	}
-	return doTeardown(cfg, hostRoot, stdout, stderr)
+	return doTeardown(cfg, pciVendorLabel, hostRoot, stdout, stderr)
+}
+
+// onNode names the node in a message only when a name is known. Both the flag
+// and $NODE_NAME can be empty — the feature file needs no node identity — and
+// an unconditional %q there reads as `on node ""`.
+func onNode(name string) string {
+	if name == "" {
+		return ""
+	}
+	return fmt.Sprintf(" on node %q", name)
 }
 
 // patcherOrWarn degrades to a nil NodePatcher, which labels.Apply and
-// labels.Remove skip. Only a missing in-cluster config is caught here — a
+// labels.RemoveLabel skip. Only a missing in-cluster config is caught here — a
 // container run outside Kubernetes — and everything that does not need the API
 // server still happens. An RBAC denial is invisible until patch time, which
-// `label` tolerates and `teardown` reports as a failed hook.
+// `label` tolerates and `teardown` reports as a warning.
 func patcherOrWarn(cfg labels.Config, action string, stderr io.Writer) labels.NodePatcher {
 	p, err := labels.NewNodePatcher()
 	if err != nil {
-		fprintf(stderr, "WARNING: no Kubernetes client (%v); %s not %s on node %q\n",
-			err, labels.GPUPresentLabel, action, cfg.NodeName)
+		fprintf(stderr, "WARNING: no Kubernetes client (%v); %s not %s%s\n",
+			err, labels.GPUPresentLabel, action, onNode(cfg.NodeName))
 		return nil
 	}
 	return p
 }
 
-func doLabel(cfg labels.Config, stdout, stderr io.Writer) int {
+func doLabel(cfg labels.Config, pciVendorLabel string, stdout, stderr io.Writer) int {
+	// The one fatal use of the gate: at setup time a typo must stop the pod
+	// rather than silently leave the NFD feature file unwritten.
+	gate, err := labels.ParseGate(pciVendorLabel)
+	if err != nil {
+		fprintf(stderr, "ERROR: %v\n", err)
+		return 2
+	}
+	cfg.PCIVendorEnabled = gate
+
 	cfg.Patcher = patcherOrWarn(cfg, "written", stderr)
 	ctx, cancel := context.WithTimeout(context.Background(), labelAPITimeout)
 	defer cancel()
@@ -181,19 +198,40 @@ func doLabel(cfg labels.Config, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func doTeardown(cfg labels.Config, hostRoot string, stdout, stderr io.Writer) int {
+func doTeardown(cfg labels.Config, pciVendorLabel, hostRoot string, stdout, stderr io.Writer) int {
+	// An unparseable gate must not cost us the teardown: it governs the NFD
+	// feature file alone, while the CDI specs, the host overlay and the driver
+	// symlink below are staged unconditionally. Gate-off is the conservative
+	// arm — it leaves behind a feature file this component may not have written,
+	// the same choice RemoveFeatureFile makes for an explicit "off".
+	gate, err := labels.ParseGate(pciVendorLabel)
+	if err != nil {
+		fprintf(stderr, "WARNING: %v; leaving the NFD feature file in place\n", err)
+	}
+	cfg.PCIVendorEnabled = gate
+
 	// Filesystem first, API last: see teardown.Run's ordering rationale.
-	fsErr := teardown.Run(teardown.Config{HostRoot: hostRoot}, stdout)
+	fsErr := errors.Join(
+		teardown.Run(teardown.Config{HostRoot: hostRoot}, stdout),
+		labels.RemoveFeatureFile(cfg),
+	)
 
 	cfg.Patcher = patcherOrWarn(cfg, "removed", stderr)
 	ctx, cancel := context.WithTimeout(context.Background(), teardownAPITimeout)
 	defer cancel()
-	labelErr := labels.Remove(ctx, cfg)
+	labelErr := labels.RemoveLabel(ctx, cfg)
 
-	// Report rather than swallow: a non-zero exit surfaces as a
-	// FailedPreStopHook event instead of vanishing.
-	if err := errors.Join(fsErr, labelErr); err != nil {
-		fprintf(stderr, "teardown incomplete on %s: %v\n", cfg.NodeName, err)
+	// Only state left on the node is worth failing the hook for. The label
+	// patch is the likeliest step to fail routinely — teardownAPITimeout has to
+	// cover a TLS handshake plus a PATCH inside a terminationGracePeriodSeconds
+	// of 1 — and routine FailedPreStopHook events would drown out the
+	// filesystem failures the event exists to surface.
+	if labelErr != nil {
+		fprintf(stderr, "WARNING: %v; %s may be left behind%s\n",
+			labelErr, labels.GPUPresentLabel, onNode(cfg.NodeName))
+	}
+	if fsErr != nil {
+		fprintf(stderr, "teardown incomplete%s: %v\n", onNode(cfg.NodeName), fsErr)
 		return 1
 	}
 	fprintf(stdout, "mock GPU environment cleaned up on %s\n", cfg.NodeName)

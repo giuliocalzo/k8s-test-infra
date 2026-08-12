@@ -105,22 +105,38 @@ func ParseGate(v string) (bool, error) {
 	}
 }
 
-// Apply makes both labels exist. The feature file is handled before the API
-// call so a rejected patch does not also cost us the label NFD derives.
+// Apply makes both labels exist.
+//
+// The argument order is load-bearing, not stylistic: Go evaluates call arguments
+// left to right, so the feature file is converged before nvidia.com/gpu.present
+// can be observed on the node. tests/e2e/go/scenario_nfd_test.go waits for
+// gpu.present as a synchronisation barrier and then asserts pci-10de.present is
+// absent, to prove NFD is that label's only writer; if the patch landed first
+// the barrier would let the negative check pass vacuously, and only an
+// intermittent Kind run would notice, so a unit test in this package pins the
+// order too.
 func Apply(ctx context.Context, cfg Config) error {
 	return errors.Join(convergeFeatureFile(cfg, cfg.PCIVendorEnabled), patch(ctx, cfg, setPatch))
 }
 
-// Remove unwinds Apply. It removes the feature file only when the gate is on,
-// so this component never deletes an input it did not supply; NFD retires the
-// label it owns on its next scan once the file is gone.
-func Remove(ctx context.Context, cfg Config) error {
-	var errs []error
-	if cfg.PCIVendorEnabled {
-		errs = append(errs, removeFeatureFile(cfg))
+// RemoveFeatureFile unwinds the write Apply made, only when the gate is on, so
+// this component never deletes an input it did not supply; NFD retires the label
+// it owns on its next scan once the file is gone.
+//
+// Split from RemoveLabel because the two failures differ in severity: a file
+// left behind keeps NFD asserting pci-10de.present on a node with no mock, while
+// a lingering gpu.present is cosmetic. Callers grade exit codes on that.
+func RemoveFeatureFile(cfg Config) error {
+	if !cfg.PCIVendorEnabled {
+		return nil
 	}
-	errs = append(errs, patch(ctx, cfg, removePatch))
-	return errors.Join(errs...)
+	return removeFeatureFile(cfg)
+}
+
+// RemoveLabel clears nvidia.com/gpu.present. Callers run it after every
+// filesystem step, because a hook killed mid-run should lose only this.
+func RemoveLabel(ctx context.Context, cfg Config) error {
+	return patch(ctx, cfg, removePatch)
 }
 
 // convergeFeatureFile writes the file when the gate is on and removes any file

@@ -196,7 +196,7 @@
     },
     "terminationGracePeriodSeconds": {
       "type": "integer",
-      "description": "Pod termination grace period (seconds). Lower values speed up rollouts; preStop teardown is fast so 5-15s is typical.",
+      "description": "Pod termination grace period (seconds). The preStop teardown does its filesystem work first and only then contacts the API server, so a low value is safe: the chart defaults to 2 and the e2e suite runs with 1 for fast rollouts.",
       "minimum": 0
     },
     "updateStrategy": {

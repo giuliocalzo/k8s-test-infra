@@ -65,6 +65,11 @@ func logf(w io.Writer, format string, a ...any) { _, _ = fmt.Fprintf(w, format, 
 // Removing another component's state from a hook we own would be wrong even
 // though it looks adjacent.
 func Run(cfg Config, out io.Writer) error {
+	// Validated once, up front: a rejected root must stop every step, not just
+	// the one that happens to check it.
+	if err := validateHostRoot(cfg.HostRoot); err != nil {
+		return err
+	}
 	return errors.Join(
 		removeCDISpecs(cfg.HostRoot, out),
 		wipeMockDir(cfg.HostRoot, out),
@@ -88,13 +93,22 @@ func removeCDISpecs(root string, out io.Writer) error {
 	return errors.Join(errs...)
 }
 
+// validateHostRoot rejects a root the recursive delete below must not run
+// against. It defends against a misconfigured or empty --host-root, not against
+// a hostile one: anything relative would resolve against this process's working
+// directory rather than the mounted host tree. A caller able to choose argv here
+// already has a privileged container with the host filesystem mounted.
+func validateHostRoot(root string) error {
+	if !filepath.IsAbs(root) {
+		return fmt.Errorf("refusing to tear down %q: host root must be an absolute path", root)
+	}
+	return nil
+}
+
 // wipeMockDir empties the mock directory without removing it: the directory is
 // a DirectoryOrCreate hostPath mount point this process writes through.
 func wipeMockDir(root string, out io.Writer) error {
 	dir := filepath.Join(root, mockDirRel)
-	if err := guardMockDir(dir); err != nil {
-		return err
-	}
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -113,16 +127,6 @@ func wipeMockDir(root string, out io.Writer) error {
 		logf(out, "mock GPU environment removed from %s\n", dir)
 	}
 	return errors.Join(errs...)
-}
-
-// guardMockDir is the structural form of the path-equality check the shell
-// hook carried. The root arrives from a flag, so a misconfigured or empty value
-// must never turn a recursive delete loose on an unintended tree.
-func guardMockDir(dir string) error {
-	if !filepath.IsAbs(dir) || filepath.Base(dir) != "nvml-mock" {
-		return fmt.Errorf("refusing to wipe %q: expected an absolute path ending in nvml-mock", dir)
-	}
-	return nil
 }
 
 func removeDriverSymlink(root string, out io.Writer) error {

@@ -40,17 +40,20 @@ const (
 	// default namespace). A label written by anything else — setup.sh's direct
 	// write of `nvidia.com/gpu.present`, say — never appears here, which makes
 	// this the direct ownership discriminator rather than an inference from
-	// ordering. Measured in the Task 1 experiment.
+	// ordering. Confirmed against NFD v0.19.0 on a Kind cluster: the annotation
+	// listed pci-10de.present and never nvidia.com/gpu.present.
 	nfdOwnedLabelsAnnotation = "nfd.node.kubernetes.io/feature-labels"
 	pciVendorFeature         = "pci-10de.present"
 
 	// Written unconditionally by setup.sh's labelling step, after everything
 	// pci-10de-related that step does, and used here only as a synchronisation
-	// barrier. See spec 1.
+	// barrier — see the first spec below, and labels.Apply for the ordering it
+	// relies on.
 	gpuPresentLabel = "nvidia.com/gpu.present"
 
-	// Container path of the feature file setup.sh writes (chart mount from
-	// Task 2; the hostPath behind it is nodeLabels.featuresDir).
+	// Container path of the feature file setup.sh writes: the chart's
+	// host-nfd-features mountPath in deployments/nvml-mock/helm/nvml-mock/
+	// templates/daemonset.yaml, whose hostPath is nodeLabels.featuresDir.
 	nfdFeatureFile = "/host/etc/kubernetes/node-feature-discovery/features.d/nvml-mock.features"
 
 	nfdLabelTimeout = 3 * time.Minute
@@ -85,7 +88,7 @@ var _ = Describe("nvml-mock NFD label provenance", Label("nfd"), Ordered, Contin
 		// config that is the CONTROL PLANE, and the NFD chart schedules no
 		// worker there (no control-plane toleration). Targeting it would make
 		// the absent-check pass for the wrong reason and the present-check
-		// fail forever. Measured in the Task 1 experiment.
+		// fail forever.
 		// Using the mock pod's node also guarantees the feature file and the
 		// label assertion refer to the same machine. The worker-role invariant
 		// is enforced inside that helper, by Kind's own node classification.

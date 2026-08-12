@@ -147,14 +147,52 @@ func TestTeardownCleansTheHostRoot(t *testing.T) {
 	cdi := filepath.Join(root, "var/run/cdi")
 	require.NoError(t, os.MkdirAll(cdi, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(cdi, "nvidia.yaml"), []byte("x"), 0o644))
+	// Spelled out rather than derived from featuresDirRel: the constant and the
+	// host-nfd-features mountPath in templates/daemonset.yaml are independent
+	// literals that must agree, and a drift in either would otherwise write and
+	// remove a feature file NFD never reads while still exiting 0.
+	feature := filepath.Join(root, "etc/kubernetes/node-feature-discovery/features.d/nvml-mock.features")
+	require.NoError(t, os.MkdirAll(filepath.Dir(feature), 0o755))
+	require.NoError(t, os.WriteFile(feature, []byte("pci-10de.present=true\n"), 0o644))
 
 	var out, errOut bytes.Buffer
 	code := run([]string{"--node-name", "n", "--host-root", root, "teardown"}, &out, &errOut)
 
 	require.Equal(t, 0, code, "no cluster is a warning, not a teardown failure")
 	require.NoFileExists(t, filepath.Join(cdi, "nvidia.yaml"))
+	require.NoFileExists(t, feature, "--host-root alone must locate NFD's features.d")
 	require.DirExists(t, mock)
 	entries, err := os.ReadDir(mock)
 	require.NoError(t, err)
 	require.Empty(t, entries)
+}
+
+func TestTeardownReportsAFailureAsANonZeroExit(t *testing.T) {
+	notInCluster(t)
+	var out, errOut bytes.Buffer
+	// A non-absolute host root is rejected before anything is removed, which is
+	// the one failure that is deterministic and safe to induce as root.
+	require.Equal(t, 1, run([]string{"teardown", "--node-name", "n", "--host-root", "relative/path"}, &out, &errOut))
+	require.Contains(t, errOut.String(), "teardown incomplete")
+}
+
+func TestTeardownSurvivesAnInvalidGateValue(t *testing.T) {
+	notInCluster(t)
+	root := t.TempDir()
+	cdi := filepath.Join(root, "var/run/cdi")
+	require.NoError(t, os.MkdirAll(cdi, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cdi, "nvidia.yaml"), []byte("x"), 0o644))
+	feature := filepath.Join(root, "etc/kubernetes/node-feature-discovery/features.d/nvml-mock.features")
+	require.NoError(t, os.MkdirAll(filepath.Dir(feature), 0o755))
+	require.NoError(t, os.WriteFile(feature, []byte("pci-10de.present=true\n"), 0o644))
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"teardown", "--node-name", "n", "--host-root", root, "--pci-vendor-label", "trues"}, &out, &errOut)
+
+	// The gate governs the feature file alone. A typo must not cost us the CDI
+	// specs, whose stale hostPaths wedge container creation on the node.
+	require.Equal(t, 0, code)
+	require.Contains(t, errOut.String(), `"trues"`)
+	require.NoFileExists(t, filepath.Join(cdi, "nvidia.yaml"))
+	require.FileExists(t, feature, "an unparseable gate reads as off, which never deletes the file")
 }

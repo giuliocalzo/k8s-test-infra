@@ -39,6 +39,21 @@ func (s *stubPatcher) Patch(_ context.Context, nodeName string, patch []byte) er
 	return s.err
 }
 
+// orderRecordingPatcher captures whether the NFD feature file was already on
+// disk when the label patch was issued. That ordering is the barrier the NFD
+// provenance e2e depends on, so it is asserted here rather than left to an
+// intermittent cluster test.
+type orderRecordingPatcher struct {
+	featurePath       string
+	fileExistsAtPatch bool
+}
+
+func (p *orderRecordingPatcher) Patch(_ context.Context, _ string, _ []byte) error {
+	_, err := os.Stat(p.featurePath)
+	p.fileExistsAtPatch = err == nil
+	return nil
+}
+
 func featurePath(dir string) string { return filepath.Join(dir, FeatureFileName) }
 
 func TestParseGateAcceptsOnAndOffCaseInsensitively(t *testing.T) {
@@ -124,6 +139,17 @@ func TestApplySkipsTheAPIWriteWithoutAPatcher(t *testing.T) {
 	require.FileExists(t, featurePath(dir))
 }
 
+func TestApplyConvergesTheFeatureFileBeforePatchingTheLabel(t *testing.T) {
+	dir := t.TempDir()
+	p := &orderRecordingPatcher{featurePath: featurePath(dir)}
+
+	require.NoError(t, Apply(context.Background(), Config{
+		NodeName: "node-1", FeaturesDir: dir, PCIVendorEnabled: true, Patcher: p,
+	}))
+	require.True(t, p.fileExistsAtPatch,
+		"tests/e2e/go/scenario_nfd_test.go uses gpu.present as its barrier for the feature file")
+}
+
 func TestApplyErrorsWhenNodeNameIsEmpty(t *testing.T) {
 	p := &stubPatcher{}
 	err := Apply(context.Background(), Config{
@@ -133,36 +159,33 @@ func TestApplyErrorsWhenNodeNameIsEmpty(t *testing.T) {
 	require.Empty(t, p.patches, "patching an unnamed node would target nothing")
 }
 
-func TestRemoveClearsTheLabelWithANullMergePatch(t *testing.T) {
+func TestRemoveLabelClearsTheLabelWithANullMergePatch(t *testing.T) {
 	p := &stubPatcher{}
-	require.NoError(t, Remove(context.Background(), Config{
-		NodeName: "node-1", FeaturesDir: t.TempDir(), PCIVendorEnabled: true, Patcher: p,
-	}))
+	require.NoError(t, RemoveLabel(context.Background(), Config{NodeName: "node-1", Patcher: p}))
 	require.JSONEq(t, `{"metadata":{"labels":{"nvidia.com/gpu.present":null}}}`, string(p.patches[0]))
 }
 
-func TestRemoveDeletesTheFeatureFileOnlyWhenTheGateIsOn(t *testing.T) {
+func TestRemoveLabelSkipsTheAPIWriteWithoutAPatcher(t *testing.T) {
+	// A nil Patcher means the caller already reported why there is no client.
+	require.NoError(t, RemoveLabel(context.Background(), Config{NodeName: "node-1"}))
+}
+
+func TestRemoveFeatureFileDeletesItOnlyWhenTheGateIsOn(t *testing.T) {
 	t.Run("gate on removes it", func(t *testing.T) {
 		dir := t.TempDir()
 		require.NoError(t, os.WriteFile(featurePath(dir), []byte(FeatureLine+"\n"), 0o644))
-		require.NoError(t, Remove(context.Background(), Config{
-			NodeName: "node-1", FeaturesDir: dir, PCIVendorEnabled: true, Patcher: &stubPatcher{},
-		}))
+		require.NoError(t, RemoveFeatureFile(Config{FeaturesDir: dir, PCIVendorEnabled: true}))
 		require.NoFileExists(t, featurePath(dir))
 	})
 
 	t.Run("gate off leaves a file we did not write", func(t *testing.T) {
 		dir := t.TempDir()
 		require.NoError(t, os.WriteFile(featurePath(dir), []byte("someone-else=true\n"), 0o644))
-		require.NoError(t, Remove(context.Background(), Config{
-			NodeName: "node-1", FeaturesDir: dir, PCIVendorEnabled: false, Patcher: &stubPatcher{},
-		}))
+		require.NoError(t, RemoveFeatureFile(Config{FeaturesDir: dir, PCIVendorEnabled: false}))
 		require.FileExists(t, featurePath(dir), "never delete an input this component did not supply")
 	})
 }
 
-func TestRemoveIsIdempotentWhenTheFeatureFileIsAlreadyGone(t *testing.T) {
-	require.NoError(t, Remove(context.Background(), Config{
-		NodeName: "node-1", FeaturesDir: t.TempDir(), PCIVendorEnabled: true, Patcher: &stubPatcher{},
-	}))
+func TestRemoveFeatureFileIsIdempotentWhenTheFileIsAlreadyGone(t *testing.T) {
+	require.NoError(t, RemoveFeatureFile(Config{FeaturesDir: t.TempDir(), PCIVendorEnabled: true}))
 }

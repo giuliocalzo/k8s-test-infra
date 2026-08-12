@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removes the CDI specs and host overlay *before* contacting the API server, so a
   hook cut short by a 1-2s `terminationGracePeriodSeconds` can only leave the
   cosmetic node label behind, never a CDI spec whose hostPaths no longer exist.
+
+  This chart version requires an image built from this commit or later: the
+  rendered preStop hook runs `/usr/local/bin/nvml-mock-node`, so a node still
+  holding an older cached `image.tag` (`latest` with `pullPolicy: IfNotPresent`)
+  fails the hook on every termination and leaves the overlay, the driver symlink
+  and both CDI specs behind.
 - CI no longer depends on the third-party `ttl.sh` registry to share e2e images
   between jobs. The nvml-mock and kind-node images are exported as tarballs and
   handed to the legs that need them as run-scoped GitHub Actions artifacts, which need no
