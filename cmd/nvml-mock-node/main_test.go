@@ -106,6 +106,39 @@ func TestLabelGateOffRemovesAStaleFeatureFile(t *testing.T) {
 	require.NoFileExists(t, path)
 }
 
+func TestLabelAcceptsFlagsAfterTheCommand(t *testing.T) {
+	notInCluster(t)
+	dir := t.TempDir()
+
+	var out, errOut bytes.Buffer
+	// The form setup.sh uses and the usage text documents.
+	code := run([]string{"label", "--node-name", "n1", "--features-dir", dir}, &out, &errOut)
+
+	require.Equal(t, 0, code)
+	require.FileExists(t, filepath.Join(dir, "nvml-mock.features"))
+	require.Contains(t, errOut.String(), "n1")
+}
+
+func TestTeardownAcceptsFlagsAfterTheCommand(t *testing.T) {
+	notInCluster(t)
+	root := t.TempDir()
+	cdi := filepath.Join(root, "var/run/cdi")
+	require.NoError(t, os.MkdirAll(cdi, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cdi, "nvidia.yaml"), []byte("x"), 0o644))
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"teardown", "--node-name", "n1", "--host-root", root}, &out, &errOut)
+
+	require.Equal(t, 0, code)
+	require.NoFileExists(t, filepath.Join(cdi, "nvidia.yaml"))
+}
+
+func TestASecondBareArgumentIsAUsageError(t *testing.T) {
+	var out, errOut bytes.Buffer
+	require.Equal(t, 2, run([]string{"label", "bogus"}, &out, &errOut))
+	require.Contains(t, errOut.String(), `unexpected argument "bogus"`)
+}
+
 func TestTeardownCleansTheHostRoot(t *testing.T) {
 	notInCluster(t)
 	root := t.TempDir()

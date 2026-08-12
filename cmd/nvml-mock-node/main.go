@@ -91,16 +91,34 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&hostRoot, "host-root", defaultHostRoot, "host filesystem root as mounted here")
 	fs.StringVar(&featuresDir, "features-dir", "", "NFD features.d directory")
 
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			usage(stdout)
-			return 0
+	// Flags may appear before or after the subcommand. The stdlib flag package
+	// stops at the first non-flag token, so parse in a loop and take the first
+	// bare token as the command: both the usage text and setup.sh put the
+	// command first, and nvml-mock-ctl parses the same way.
+	var cmd string
+	rest := args
+	for len(rest) > 0 {
+		if err := fs.Parse(rest); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				usage(stdout)
+				return 0
+			}
+			usage(stderr)
+			return 2
 		}
-		usage(stderr)
-		return 2
+		remaining := fs.Args()
+		if len(remaining) == 0 {
+			break
+		}
+		if cmd != "" {
+			fprintf(stderr, "unexpected argument %q\n", remaining[0])
+			usage(stderr)
+			return 2
+		}
+		cmd = remaining[0]
+		rest = remaining[1:]
 	}
-	rest := fs.Args()
-	if len(rest) != 1 {
+	if cmd == "" {
 		usage(stderr)
 		return 2
 	}
@@ -108,13 +126,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		featuresDir = filepath.Join(hostRoot, featuresDirRel)
 	}
 
-	switch rest[0] {
+	switch cmd {
 	case "help":
 		usage(stdout)
 		return 0
 	case "label", "teardown":
 	default:
-		fprintf(stderr, "unknown command %q\n", rest[0])
+		fprintf(stderr, "unknown command %q\n", cmd)
 		usage(stderr)
 		return 2
 	}
@@ -126,7 +144,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	cfg := labels.Config{NodeName: nodeName, FeaturesDir: featuresDir, PCIVendorEnabled: gate}
 
-	if rest[0] == "label" {
+	if cmd == "label" {
 		return doLabel(cfg, stdout, stderr)
 	}
 	return doTeardown(cfg, hostRoot, stdout, stderr)
