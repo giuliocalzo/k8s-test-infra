@@ -69,13 +69,14 @@ tolerations:
 resources: {}
 
 # Node labels nvml-mock causes to exist, reversed again by the preStop
-# cleanup.sh. setup.sh writes nvidia.com/gpu.present directly with `kubectl
-# label`; feature.node.kubernetes.io/pci-10de.present is created by NFD from a
-# feature file setup.sh drops in featuresDir below. setup.sh converges either
-# way: with the switch on it writes that file, with it off it removes any file
-# an earlier run left behind. cleanup.sh unwinds only setup.sh's own write, so
-# with the switch off it has nothing to undo. The label belongs to NFD, which
-# retires it on its next discovery cycle once the file is gone.
+# teardown. setup.sh writes nvidia.com/gpu.present through the API server
+# (client-go, in the nvml-mock-node binary — the image ships no kubectl);
+# feature.node.kubernetes.io/pci-10de.present is created by NFD from a feature
+# file nvml-mock drops in featuresDir below. Either way it converges: with the
+# switch on it writes that file, with it off it removes any file an earlier run
+# left behind. Teardown unwinds only nvml-mock's own write, so with the switch
+# off it has nothing to undo. The label belongs to NFD, which retires it on its
+# next discovery cycle once the file is gone.
 nodeLabels:
   # feature.node.kubernetes.io/pci-10de.present=true
   #
@@ -89,7 +90,7 @@ nodeLabels:
   # host-prefixed sysfs path fixed at link time (/host-sys/bus/pci/devices), so
   # our rendered tree at /var/lib/nvml-mock/sys is not on a path it reads. The
   # tree itself is complete — pointed at it, NFD enumerates every mock GPU and
-  # derives exactly this label. See setup.sh step 7 for the full analysis.
+  # derives exactly this label. See pkg/node/labels for the full analysis.
   #
   # Keep the default (true) on a mock-only cluster running NFD: consumers that
   # gate on the NFD PCI label (GPU Operator operands, nfd-based nodeSelectors)
@@ -234,9 +235,10 @@ updateStrategy:
   rollingUpdate:
     maxUnavailable: 25%
 
-# Pod termination grace period. preStop cleanup is a few rm -rf
-# calls plus kubectl label requests, so the upstream 30s default
-# is overkill and slows rollouts.
+# Pod termination grace period. The preStop teardown is a few file removals
+# followed by one node-label patch, so the upstream 30s default is overkill and
+# slows rollouts. Teardown does its filesystem work first, so even a hook cut
+# short here cannot leave a CDI spec pointing at deleted device nodes.
 terminationGracePeriodSeconds: 2
 
 # ComputeDomain (NVLink fabric) simulation. Opt-in: when `topology.enabled`

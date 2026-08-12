@@ -62,10 +62,13 @@ const (
 	// GPUPresentLabel is the one label this component writes directly.
 	GPUPresentLabel = "nvidia.com/gpu.present"
 
-	// FeatureFileName and FeatureLine are the NFD local-source input that
-	// yields feature.node.kubernetes.io/pci-10de.present=true.
+	// FeatureFileName is the file this package drops in NFD's features.d.
 	FeatureFileName = "nvml-mock.features"
-	FeatureLine     = "pci-10de.present=true"
+
+	// FeatureLine is that file's only line, in the key=value form NFD's local
+	// source parses, and yields
+	// feature.node.kubernetes.io/pci-10de.present=true.
+	FeatureLine = "pci-10de.present=true"
 
 	setPatch    = `{"metadata":{"labels":{"nvidia.com/gpu.present":"true"}}}`
 	removePatch = `{"metadata":{"labels":{"nvidia.com/gpu.present":null}}}`

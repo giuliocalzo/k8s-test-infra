@@ -37,16 +37,16 @@ const (
 
 	// NFD records every label it owns in this annotation, as a comma-separated
 	// list of label names WITHOUT the feature.node.kubernetes.io/ prefix (its
-	// default namespace). A label written by anything else — setup.sh's
-	// `kubectl label`, say — never appears here, which makes this the direct
-	// ownership discriminator rather than an inference from ordering. Measured
-	// in the Task 1 experiment.
+	// default namespace). A label written by anything else — setup.sh's direct
+	// write of `nvidia.com/gpu.present`, say — never appears here, which makes
+	// this the direct ownership discriminator rather than an inference from
+	// ordering. Measured in the Task 1 experiment.
 	nfdOwnedLabelsAnnotation = "nfd.node.kubernetes.io/feature-labels"
 	pciVendorFeature         = "pci-10de.present"
 
-	// Written unconditionally by setup.sh in step 7, before anything
-	// pci-10de-related, and used here only as a synchronisation barrier.
-	// See spec 1.
+	// Written unconditionally by setup.sh's labelling step, after everything
+	// pci-10de-related that step does, and used here only as a synchronisation
+	// barrier. See spec 1.
 	gpuPresentLabel = "nvidia.com/gpu.present"
 
 	// Container path of the feature file setup.sh writes (chart mount from
@@ -100,11 +100,12 @@ var _ = Describe("nvml-mock NFD label provenance", Label("nfd"), Ordered, Contin
 		// Nothing else orders us after setup.sh's labelling step: the nvml-mock
 		// DaemonSet declares no readinessProbe, demoRelease sets
 		// maxUnavailable=100% so `helm --wait` returns on merely-scheduled
-		// pods, and pod selection waits only for phase Running. setup.sh writes
-		// nvidia.com/gpu.present unconditionally in step 7, still ahead of the
-		// pci-10de feature-file block that follows it, so observing it proves
-		// setup.sh reached the labelling block — and that a still-absent
-		// pci-10de label is a real absence, not a race we won.
+		// pods, and pod selection waits only for phase Running. setup.sh's
+		// labelling step converges the pci-10de feature file before it writes
+		// nvidia.com/gpu.present, so observing that label proves everything
+		// nvml-mock does towards the pci-10de label has already happened — and
+		// that a still-absent pci-10de label is a real absence, not a race we
+		// won.
 		assertions.WaitNodeLabelsPresent(ctx, h.Kube, node,
 			[]string{gpuPresentLabel}, nfdLabelTimeout, nfdLabelPoll)
 

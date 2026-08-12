@@ -12,9 +12,9 @@
 // limitations under the License.
 
 // nvml-mock-node performs the two cluster-facing steps of the nvml-mock
-// DaemonSet's lifecycle: `label` makes the node labels the mock causes to exist
-// exist (called from setup.sh), and `teardown` unwinds the node-local state
-// (the preStop hook). It exists so the image ships no kubectl binary.
+// DaemonSet's lifecycle: `label` brings into existence the node labels the mock
+// causes to exist (called from setup.sh), and `teardown` unwinds the node-local
+// state (the preStop hook). It exists so the image ships no kubectl binary.
 package main
 
 import (
@@ -78,6 +78,7 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+//nolint:cyclop // existing complexity; refactor deferred
 func run(args []string, stdout, stderr io.Writer) int {
 	var nodeName, pciVendorLabel, hostRoot, featuresDir string
 	fs := flag.NewFlagSet("nvml-mock-node", flag.ContinueOnError)

@@ -169,10 +169,11 @@ tests:
             value: "580.65.06"
 
   # ── NFD pci-10de feature-file gate (nodeLabels.pciVendorPresent) ─────
-  # setup.sh and cleanup.sh both branch on MOCK_NFD_PCI_LABEL. They accept
-  # only "on"/"off" and abort the pod on anything else, so the exact string
-  # matters, not merely the presence of the variable. The value gates the
-  # feature FILE; NFD is what turns that file into the label.
+  # `nvml-mock-node label` and `nvml-mock-node teardown` both branch on
+  # MOCK_NFD_PCI_LABEL. They accept only "on"/"off" and exit non-zero on
+  # anything else, which aborts the pod at setup, so the exact string matters,
+  # not merely the presence of the variable. The value gates the feature FILE;
+  # NFD is what turns that file into the label.
   - it: should enable the NFD pci-10de feature file by default
     asserts:
       - contains:
@@ -193,9 +194,9 @@ tests:
             value: "off"
 
   # ── NFD features.d mount (nodeLabels.featuresDir) ────────────────────
-  # setup.sh writes the pci-10de feature file here instead of calling
-  # kubectl label. Without this mount the write silently lands inside the
-  # container and NFD never sees it, so the mount IS the contract.
+  # setup.sh writes the pci-10de feature file here instead of writing the
+  # label to the node API. Without this mount the write silently lands inside
+  # the container and NFD never sees it, so the mount IS the contract.
   - it: should mount the NFD features.d host directory
     asserts:
       - contains:
