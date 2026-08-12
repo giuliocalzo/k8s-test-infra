@@ -37,8 +37,9 @@ integrations:
 # Rolls all pods on any DaemonSet change (default 25%) and cuts termination
 # grace from 2s to 1s. The demo's preStop teardown is a few file removals plus
 # one node-label patch, and it does the removals first, so a hook cut short by
-# this shorter grace period loses only the label — which keeps the "helm
-# upgrade for the next profile" cycle fast at no cost to node state.
+# this shorter grace period loses at most the label — never a CDI spec pointing
+# at deleted device nodes — which keeps the "helm upgrade for the next profile"
+# cycle fast.
 terminationGracePeriodSeconds: 1
 updateStrategy:
   rollingUpdate:

@@ -12,9 +12,9 @@
 // limitations under the License.
 
 // nvml-mock-node performs the two cluster-facing steps of the nvml-mock
-// DaemonSet's lifecycle: `label` brings into existence the node labels the mock
-// causes to exist (called from setup.sh), and `teardown` unwinds the node-local
-// state (the preStop hook). It exists so the image ships no kubectl binary.
+// DaemonSet's lifecycle: `label` makes both node labels the mock is responsible
+// for exist (called from setup.sh), and `teardown` unwinds the node-local state
+// (the preStop hook). It exists so the image ships no kubectl binary.
 package main
 
 import (
@@ -78,7 +78,7 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-//nolint:cyclop // existing complexity; refactor deferred
+//nolint:cyclop // flag/subcommand dispatch; the complexity is the parse loop, not branching logic
 func run(args []string, stdout, stderr io.Writer) int {
 	var nodeName, pciVendorLabel, hostRoot, featuresDir string
 	fs := flag.NewFlagSet("nvml-mock-node", flag.ContinueOnError)
@@ -152,8 +152,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 // patcherOrWarn degrades to a nil NodePatcher, which labels.Apply/Remove skip.
-// A cluster without the RBAC, or a container run outside Kubernetes, then
-// behaves as it did when the image shipped no kubectl.
+// A cluster without the RBAC, or a container run outside Kubernetes, gets a
+// warning and an otherwise-normal run: everything that does not need the API
+// server still happens.
 func patcherOrWarn(cfg labels.Config, action string, stderr io.Writer) labels.NodePatcher {
 	p, err := labels.NewNodePatcher()
 	if err != nil {

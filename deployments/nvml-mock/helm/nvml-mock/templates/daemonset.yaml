@@ -73,9 +73,10 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
             # Gates the NFD feature file that yields
-            # feature.node.kubernetes.io/pci-10de.present=true. setup.sh writes
-            # the file and `nvml-mock-node teardown` removes it only when this
-            # is "on", so the mock never deletes an input it did not supply.
+            # feature.node.kubernetes.io/pci-10de.present=true.
+            # `nvml-mock-node label` (run by setup.sh) writes the file when this
+            # is "on", and `nvml-mock-node teardown` removes it only then, so
+            # the mock never deletes an input it did not supply.
             # NFD, not the mock, creates the label. NFD's PCI source cannot
             # derive it as deployed — nfd-worker reads a link-time-fixed
             # /host-sys path, so the rendered tree is not on a path it reads;

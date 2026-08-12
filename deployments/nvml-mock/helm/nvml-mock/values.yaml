@@ -72,11 +72,11 @@ resources: {}
 # teardown. setup.sh writes nvidia.com/gpu.present through the API server
 # (client-go, in the nvml-mock-node binary — the image ships no kubectl);
 # feature.node.kubernetes.io/pci-10de.present is created by NFD from a feature
-# file nvml-mock drops in featuresDir below. Either way it converges: with the
-# switch on it writes that file, with it off it removes any file an earlier run
-# left behind. Teardown unwinds only nvml-mock's own write, so with the switch
-# off it has nothing to undo. The label belongs to NFD, which retires it on its
-# next discovery cycle once the file is gone.
+# file nvml-mock drops in featuresDir below. The labelling step converges either
+# way: with the switch on it writes that file, with it off it removes any file
+# an earlier run left behind. Teardown unwinds only nvml-mock's own write, so
+# with the switch off it has nothing to undo. The label belongs to NFD, which
+# retires it on its next discovery cycle once the file is gone.
 nodeLabels:
   # feature.node.kubernetes.io/pci-10de.present=true
   #

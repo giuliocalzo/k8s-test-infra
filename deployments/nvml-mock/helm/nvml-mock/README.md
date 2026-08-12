@@ -971,8 +971,9 @@ namespace, on the pod IP where the kubelet reaches it.
 
 The DaemonSet's `setup.sh` writes one node label directly through the API
 server, and drops a feature file that NFD turns into a second. The preStop
-teardown removes the first label and deletes the feature file; NFD retires the
-second label itself on its next cycle:
+teardown removes the first label and, when `nodeLabels.pciVendorPresent` is
+enabled, deletes the feature file; NFD retires the second label itself on its
+next cycle:
 
 | Label | Written by | Gated by | Default |
 |-------|-----------|----------|---------|

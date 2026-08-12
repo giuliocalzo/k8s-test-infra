@@ -29,15 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   public NVML APIs.
 
 ### Changed
-- The nvml-mock image no longer ships `kubectl`. The two node-label writes it
-  performed go through `client-go` in a new `nvml-mock-node` binary:
-  `nvml-mock-node label` (called from `setup.sh`) and `nvml-mock-node teardown`
-  (the DaemonSet's preStop hook, replacing `scripts/cleanup.sh`, which is
-  deleted). RBAC is unchanged — the existing `nodes: [get, patch]` ClusterRole
-  already covers the merge patch. Teardown now removes the CDI specs and host
-  overlay *before* contacting the API server, so a hook cut short by a 1-2s
-  `terminationGracePeriodSeconds` can only leave the cosmetic node label
-  behind, never a CDI spec whose hostPaths no longer exist.
+- The nvml-mock image no longer ships `kubectl`. The one label it wrote directly,
+  `nvidia.com/gpu.present`, is now added and removed through `client-go` in a new
+  `nvml-mock-node` binary: `nvml-mock-node label` (called from `setup.sh`) and
+  `nvml-mock-node teardown` (the DaemonSet's preStop hook, replacing
+  `scripts/cleanup.sh`, which is deleted). The same binary converges the NFD
+  feature file behind `feature.node.kubernetes.io/pci-10de.present`, a key NFD
+  still owns and derives on its own. RBAC is unchanged — the existing
+  `nodes: [get, patch]` ClusterRole already covers the merge patch. Teardown now
+  removes the CDI specs and host overlay *before* contacting the API server, so a
+  hook cut short by a 1-2s `terminationGracePeriodSeconds` can only leave the
+  cosmetic node label behind, never a CDI spec whose hostPaths no longer exist.
 - CI no longer depends on the third-party `ttl.sh` registry to share e2e images
   between jobs. The nvml-mock and kind-node images are exported as tarballs and
   handed to the legs that need them as run-scoped GitHub Actions artifacts, which need no
