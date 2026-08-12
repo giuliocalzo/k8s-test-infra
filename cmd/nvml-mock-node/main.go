@@ -78,7 +78,7 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-//nolint:cyclop // flag/subcommand dispatch; the complexity is the parse loop, not branching logic
+//nolint:cyclop // mechanical arg parsing and subcommand dispatch
 func run(args []string, stdout, stderr io.Writer) int {
 	var nodeName, pciVendorLabel, hostRoot, featuresDir string
 	fs := flag.NewFlagSet("nvml-mock-node", flag.ContinueOnError)
@@ -151,10 +151,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return doTeardown(cfg, hostRoot, stdout, stderr)
 }
 
-// patcherOrWarn degrades to a nil NodePatcher, which labels.Apply/Remove skip.
-// A cluster without the RBAC, or a container run outside Kubernetes, gets a
-// warning and an otherwise-normal run: everything that does not need the API
-// server still happens.
+// patcherOrWarn degrades to a nil NodePatcher, which labels.Apply and
+// labels.Remove skip. Only a missing in-cluster config is caught here — a
+// container run outside Kubernetes — and everything that does not need the API
+// server still happens. An RBAC denial is invisible until patch time, which
+// `label` tolerates and `teardown` reports as a failed hook.
 func patcherOrWarn(cfg labels.Config, action string, stderr io.Writer) labels.NodePatcher {
 	p, err := labels.NewNodePatcher()
 	if err != nil {

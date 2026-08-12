@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `nvml-mock-node teardown` (the DaemonSet's preStop hook, replacing
   `scripts/cleanup.sh`, which is deleted). The same binary converges the NFD
   feature file behind `feature.node.kubernetes.io/pci-10de.present`, a key NFD
-  still owns and derives on its own. RBAC is unchanged — the existing
+  still owns and derives from that file. RBAC is unchanged — the existing
   `nodes: [get, patch]` ClusterRole already covers the merge patch. Teardown now
   removes the CDI specs and host overlay *before* contacting the API server, so a
   hook cut short by a 1-2s `terminationGracePeriodSeconds` can only leave the
