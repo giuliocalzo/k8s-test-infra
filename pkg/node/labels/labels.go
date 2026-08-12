@@ -107,6 +107,10 @@ func ParseGate(v string) (bool, error) {
 
 // Apply makes both labels exist.
 //
+// It is deliberately not split the way RemoveFeatureFile and RemoveLabel are:
+// at setup time both halves are tolerant, so there is no severity to separate,
+// and keeping them in one call keeps the ordering below where it is enforced.
+//
 // The argument order is load-bearing, not stylistic: Go evaluates call arguments
 // left to right, so the feature file is converged before nvidia.com/gpu.present
 // can be observed on the node. tests/e2e/go/scenario_nfd_test.go waits for
@@ -116,7 +120,7 @@ func ParseGate(v string) (bool, error) {
 // intermittent Kind run would notice, so a unit test in this package pins the
 // order too.
 func Apply(ctx context.Context, cfg Config) error {
-	return errors.Join(convergeFeatureFile(cfg, cfg.PCIVendorEnabled), patch(ctx, cfg, setPatch))
+	return errors.Join(convergeFeatureFile(cfg), patch(ctx, cfg, setPatch))
 }
 
 // RemoveFeatureFile unwinds the write Apply made, only when the gate is on, so
@@ -141,8 +145,8 @@ func RemoveLabel(ctx context.Context, cfg Config) error {
 
 // convergeFeatureFile writes the file when the gate is on and removes any file
 // an earlier run left behind when it is off, so either arm converges.
-func convergeFeatureFile(cfg Config, want bool) error {
-	if !want {
+func convergeFeatureFile(cfg Config) error {
+	if !cfg.PCIVendorEnabled {
 		return removeFeatureFile(cfg)
 	}
 	if err := os.MkdirAll(cfg.FeaturesDir, 0o755); err != nil {

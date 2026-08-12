@@ -980,9 +980,11 @@ next cycle:
 | `nvidia.com/gpu.present=true` | nvml-mock (`nvml-mock-node label`, client-go) | not gated — always written | n/a |
 | `feature.node.kubernetes.io/pci-10de.present=true` | **NFD**, from a feature file nvml-mock writes | `nodeLabels.pciVendorPresent` | `true` |
 
-> **Upgrading:** both the labelling step and the preStop teardown run the
-> `nvml-mock-node` binary, so this chart version needs an image built from the
-> commit that introduced it or later. With the default `image.tag: latest` and
+> **Upgrading:** the chart renders the preStop hook's `nvml-mock-node teardown`
+> argv itself, so this chart version needs an image built from the commit that
+> introduced that binary or later. (The labelling step is not part of the
+> contract: it is invoked by `setup.sh`, which ships inside the image and so
+> always matches it.) With the default `image.tag: latest` and
 > `pullPolicy: IfNotPresent` a node still holding an older cached image fails the
 > preStop hook on every termination and cleans nothing up, so pull a fresh image
 > (or pin a digest) when upgrading.

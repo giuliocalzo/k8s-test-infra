@@ -97,6 +97,10 @@ func TestRunRefusesARootThatIsNotAbsolute(t *testing.T) {
 
 	// Seed a tree reachable through a relative root, so a check that fires too
 	// late — after the CDI specs have already been removed — fails here.
+	//
+	// t.Chdir changes the working directory of the whole test binary, so no test
+	// in this package may call t.Parallel(): it would race this relative root
+	// silently (t.Chdir only panics when the test calling it is itself parallel).
 	t.Chdir(t.TempDir())
 	spec := filepath.Join("host", "var/run/cdi", "nvidia.yaml")
 	require.NoError(t, os.MkdirAll(filepath.Dir(spec), 0o755))

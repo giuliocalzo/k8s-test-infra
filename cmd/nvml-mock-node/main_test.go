@@ -15,11 +15,15 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/NVIDIA/k8s-test-infra/pkg/node/labels"
 )
 
 // notInCluster makes rest.InClusterConfig fail deterministically, so these
@@ -28,6 +32,22 @@ func notInCluster(t *testing.T) {
 	t.Helper()
 	t.Setenv("KUBERNETES_SERVICE_HOST", "")
 	t.Setenv("KUBERNETES_SERVICE_PORT", "")
+}
+
+// failingPatcher is a client that reaches the API server and is refused there —
+// an RBAC denial or a timeout inside the grace period. notInCluster cannot
+// produce this: a nil patcher is skipped before any patch is attempted.
+type failingPatcher struct{}
+
+func (failingPatcher) Patch(context.Context, string, []byte) error {
+	return errors.New(`nodes "n" is forbidden`)
+}
+
+func withAFailingPatcher(t *testing.T) {
+	t.Helper()
+	original := newPatcher
+	t.Cleanup(func() { newPatcher = original })
+	newPatcher = func() (labels.NodePatcher, error) { return failingPatcher{}, nil }
 }
 
 func TestHelpExitsZero(t *testing.T) {
@@ -174,6 +194,54 @@ func TestTeardownReportsAFailureAsANonZeroExit(t *testing.T) {
 	// the one failure that is deterministic and safe to induce as root.
 	require.Equal(t, 1, run([]string{"teardown", "--node-name", "n", "--host-root", "relative/path"}, &out, &errOut))
 	require.Contains(t, errOut.String(), "teardown incomplete")
+}
+
+func TestTeardownSkipsTheFeatureFileWhenTheHostRootIsRejected(t *testing.T) {
+	notInCluster(t)
+	dir := t.TempDir()
+	feature := filepath.Join(dir, "nvml-mock.features")
+	require.NoError(t, os.WriteFile(feature, []byte("pci-10de.present=true\n"), 0o644))
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"teardown", "--node-name", "n", "--host-root", "relative/path", "--features-dir", dir}, &out, &errOut)
+
+	// teardown.Run rejects the root before its first step; the feature-file
+	// removal is part of the same teardown and must not proceed alone.
+	require.Equal(t, 1, code)
+	require.FileExists(t, feature, "a rejected root must stop every step, at the command layer too")
+}
+
+func TestTeardownWarnsInsteadOfFailingWhenTheLabelPatchIsRefused(t *testing.T) {
+	withAFailingPatcher(t)
+	root := t.TempDir()
+	cdi := filepath.Join(root, "var/run/cdi")
+	require.NoError(t, os.MkdirAll(cdi, 0o755))
+	spec := filepath.Join(cdi, "nvidia.yaml")
+	require.NoError(t, os.WriteFile(spec, []byte("x"), 0o644))
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"teardown", "--node-name", "n", "--host-root", root}, &out, &errOut)
+
+	// A lingering label is cosmetic, and the patch is the step likeliest to fail
+	// routinely, so it must not raise a FailedPreStopHook event that would drown
+	// out the filesystem failures that event exists to surface.
+	require.Equal(t, 0, code)
+	require.Contains(t, errOut.String(), "may be left behind")
+	require.NoFileExists(t, spec, "a refused patch must not stop the filesystem teardown")
+}
+
+func TestLabelWarnsInsteadOfFailingWhenTheLabelPatchIsRefused(t *testing.T) {
+	withAFailingPatcher(t)
+	dir := t.TempDir()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"label", "--node-name", "n", "--features-dir", dir}, &out, &errOut)
+
+	// The mirror image of the teardown case: at setup time neither half is worth
+	// aborting setup.sh for.
+	require.Equal(t, 0, code)
+	require.Contains(t, errOut.String(), "WARNING")
+	require.FileExists(t, filepath.Join(dir, "nvml-mock.features"))
 }
 
 func TestTeardownSurvivesAnInvalidGateValue(t *testing.T) {

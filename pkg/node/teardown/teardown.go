@@ -32,6 +32,11 @@ const (
 	cdiDirRel        = "var/run/cdi"
 )
 
+// ErrInvalidHostRoot reports that Run rejected its configuration and ran no
+// step at all. Callers that pair Run with their own filesystem cleanup match on
+// it to skip that work too, rather than resolving the same bad root themselves.
+var ErrInvalidHostRoot = errors.New("invalid host root")
+
 // cdiSpecs are the two specs setup.sh stages. Both name device nodes under the
 // mock directory, so leaving either behind after the wipe below hands the
 // runtime a spec whose hostPaths no longer exist: containerd fails container
@@ -52,7 +57,8 @@ func logf(w io.Writer, format string, a ...any) { _, _ = fmt.Fprintf(w, format, 
 
 // Run removes every piece of node-local state nvml-mock owns, continuing past
 // individual failures and joining them, so one unwritable path cannot hide the
-// rest of the teardown.
+// rest of the teardown. The one exception precedes all of them: an unusable
+// HostRoot returns ErrInvalidHostRoot before any step runs.
 //
 // Order matters. The CDI specs go first, ahead of the device nodes they name,
 // which closes the window where a spec references deleted paths. The API-side
@@ -100,7 +106,7 @@ func removeCDISpecs(root string, out io.Writer) error {
 // already has a privileged container with the host filesystem mounted.
 func validateHostRoot(root string) error {
 	if !filepath.IsAbs(root) {
-		return fmt.Errorf("refusing to tear down %q: host root must be an absolute path", root)
+		return fmt.Errorf("refusing to tear down %q: %w: must be an absolute path", root, ErrInvalidHostRoot)
 	}
 	return nil
 }

@@ -47,6 +47,10 @@ const (
 	teardownAPITimeout = time.Second
 )
 
+// Injectable so the teardown severity mapping — a failed patch warns, filesystem
+// failures fail the hook — is testable without a cluster.
+var newPatcher = labels.NewNodePatcher
+
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 // Writes to this CLI's stdout/stderr can't meaningfully fail-recover, so these
@@ -165,7 +169,7 @@ func onNode(name string) string {
 // server still happens. An RBAC denial is invisible until patch time, which
 // `label` tolerates and `teardown` reports as a warning.
 func patcherOrWarn(cfg labels.Config, action string, stderr io.Writer) labels.NodePatcher {
-	p, err := labels.NewNodePatcher()
+	p, err := newPatcher()
 	if err != nil {
 		fprintf(stderr, "WARNING: no Kubernetes client (%v); %s not %s%s\n",
 			err, labels.GPUPresentLabel, action, onNode(cfg.NodeName))
@@ -194,7 +198,7 @@ func doLabel(cfg labels.Config, pciVendorLabel string, stdout, stderr io.Writer)
 		fprintf(stderr, "WARNING: %v\n", err)
 		return 0
 	}
-	fprintf(stdout, "node labels applied on %s\n", cfg.NodeName)
+	fprintf(stdout, "node labels applied%s\n", onNode(cfg.NodeName))
 	return 0
 }
 
@@ -207,14 +211,21 @@ func doTeardown(cfg labels.Config, pciVendorLabel, hostRoot string, stdout, stde
 	gate, err := labels.ParseGate(pciVendorLabel)
 	if err != nil {
 		fprintf(stderr, "WARNING: %v; leaving the NFD feature file in place\n", err)
+		// Stated here rather than inherited from ParseGate's zero value, so the
+		// conservative arm does not depend on what a future gate value returns
+		// alongside its error.
+		gate = false
 	}
 	cfg.PCIVendorEnabled = gate
 
 	// Filesystem first, API last: see teardown.Run's ordering rationale.
-	fsErr := errors.Join(
-		teardown.Run(teardown.Config{HostRoot: hostRoot}, stdout),
-		labels.RemoveFeatureFile(cfg),
-	)
+	fsErr := teardown.Run(teardown.Config{HostRoot: hostRoot}, stdout)
+	// A rejected root stops teardown.Run before its first step, and the features
+	// path defaults to a directory under that same root — attempting the removal
+	// anyway would resolve it against this process's working directory.
+	if !errors.Is(fsErr, teardown.ErrInvalidHostRoot) {
+		fsErr = errors.Join(fsErr, labels.RemoveFeatureFile(cfg))
+	}
 
 	cfg.Patcher = patcherOrWarn(cfg, "removed", stderr)
 	ctx, cancel := context.WithTimeout(context.Background(), teardownAPITimeout)
@@ -234,6 +245,6 @@ func doTeardown(cfg labels.Config, pciVendorLabel, hostRoot string, stdout, stde
 		fprintf(stderr, "teardown incomplete%s: %v\n", onNode(cfg.NodeName), fsErr)
 		return 1
 	}
-	fprintf(stdout, "mock GPU environment cleaned up on %s\n", cfg.NodeName)
+	fprintf(stdout, "mock GPU environment cleaned up%s\n", onNode(cfg.NodeName))
 	return 0
 }
