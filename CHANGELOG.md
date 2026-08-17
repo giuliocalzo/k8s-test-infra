@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ttl.sh` default too: `make build` now tags `kind-nvidia-cdi:local` in the
   local docker daemon, which is all `kind create cluster --image` reads, and
   `make push` requires a registry-qualified `IMAGE`. (#566)
+- `go.mod` is now the single source of truth for the repo's Go version.
+  `hack/golang-version.sh` reads its `go` directive instead of grepping
+  `deployments/devel/Dockerfile`, and that placeholder — which existed only so
+  Dependabot could bump the pin — is gone along with its Dependabot entry. The
+  `go` directive moves 1.26.0 -> 1.26.6 to match the pins already in the build.
+  Dependabot never updated the directive itself, so Go patch bumps are now a
+  manual `go.mod` edit.
 - The ComputeDomain demo now runs real IMEX as a separate, ordinary workload;
   NRI supplies its mock NVML overlay, per-node topology, and annotated channel
   devices. Reruns deterministically reuse only compatible NRI-enabled Kind

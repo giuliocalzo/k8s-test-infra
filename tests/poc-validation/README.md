@@ -41,7 +41,7 @@ Reproducible scripts for validating NVIDIA GPU consumers (device plugin, DRA dri
 | `GPU_COUNT` | `8` | Number of mock GPUs |
 | `CLUSTER_NAME` | `nvml-mock-poc` | Kind cluster name |
 | `MOCK_NVML_DEBUG` | `1` | Enable NVML debug traces |
-| `GOLANG_VERSION` | `1.25` | Go version for building nvml-mock image |
+| `GOLANG_VERSION` | `1.26.6` | Go version for building nvml-mock image |
 
 ## Output
 

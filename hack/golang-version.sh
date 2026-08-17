@@ -13,10 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-SCRIPTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/../hack && pwd )"
+set -euo pipefail
 
-DOCKERFILE_ROOT=${SCRIPTS_DIR}/../deployments/devel
+REPO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
+GO_MOD="${REPO_ROOT}/go.mod"
 
-GOLANG_VERSION=$(grep -E "^FROM golang:.*$" ${DOCKERFILE_ROOT}/Dockerfile | grep -oE "[0-9\.]+")
+# The `go` directive in go.mod is the single source of truth for the Go version
+# used across builds and CI. It is pinned to a full x.y.z so the output doubles
+# as a golang container image tag.
+GOLANG_VERSION=$(awk '$1 == "go" { print $2; exit }' "${GO_MOD}")
 
-echo $GOLANG_VERSION
+if [[ ! "${GOLANG_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "golang-version.sh: could not read an x.y.z go directive from ${GO_MOD} (got '${GOLANG_VERSION}')" >&2
+    exit 1
+fi
+
+echo "${GOLANG_VERSION}"

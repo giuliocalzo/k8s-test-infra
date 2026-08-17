@@ -39,9 +39,9 @@ ARG NVML_MOCK_IMAGE=ghcr.io/nvidia/nvml-mock:latest
 # Verified live 2026-07-03. No `latest` tag is published — bump the
 # pinned version deliberately.
 ARG COMPUTE_DOMAIN_DAEMON_IMAGE=registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu:v0.4.1
-# Default kept in lockstep with hack/golang-version.sh (repo-wide pin,
-# see the #394 CVE refresh); the demo script overrides it with the
-# script's output anyway.
+# Default kept in lockstep with the `go` directive in go.mod (the repo-wide
+# pin, see the #394 CVE refresh); the demo script overrides it with
+# hack/golang-version.sh output anyway.
 ARG GOLANG_VERSION=1.26.6
 
 # Real IMEX daemon + ctl. Ubuntu redistributes the NVIDIA driver stack

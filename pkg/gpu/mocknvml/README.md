@@ -52,7 +52,7 @@ binaries even on macOS.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LIB_VERSION` | Library version (appears in filename) | 550.163.01 |
-| `GOLANG_VERSION` | Go version for Docker builds | 1.25.0 |
+| `GOLANG_VERSION` | Go version for Docker builds | 1.26.6 |
 | `TARGET_LIB_SIZE` | Target on-disk size in bytes (two-pass auto-pads to this) | `14680064` (≈14 MiB) |
 | `PADDING_BYTES` | Explicit padding size in bytes (overrides `TARGET_LIB_SIZE`) | _(unset → auto)_ |
 | `NO_PADDING` | Set to `1` to disable padding (small library) | _(unset)_ |
