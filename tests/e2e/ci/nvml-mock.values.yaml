@@ -35,9 +35,11 @@ integrations:
     enabled: true
 
 # Rolls all pods on any DaemonSet change (default 25%) and cuts termination
-# grace from 2s to 1s. The demo's preStop cleanup is only a few rm -rf calls
-# plus label kubectl requests, so a shorter grace period keeps the "helm
-# upgrade for the next profile" cycle fast.
+# grace from 2s to 1s. The demo's preStop teardown is a few file removals plus
+# one node-label patch, and it does the removals first, so a hook cut short by
+# this shorter grace period loses at most the label — never a CDI spec pointing
+# at deleted device nodes — which keeps the "helm upgrade for the next profile"
+# cycle fast.
 terminationGracePeriodSeconds: 1
 updateStrategy:
   rollingUpdate:

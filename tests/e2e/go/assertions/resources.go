@@ -127,8 +127,8 @@ func NodeLabelSoft(ctx context.Context, k *kube.Client, node, key string) {
 
 // NodeLabelAbsent asserts a node label is not set at all. This is the guard
 // that proves provenance: with NFD absent, nothing in nvml-mock may create
-// feature.node.kubernetes.io/pci-10de.present. Reinstating a direct
-// `kubectl label` for that key turns this red.
+// feature.node.kubernetes.io/pci-10de.present. Writing that key directly
+// instead of via the feature file turns this red.
 func NodeLabelAbsent(ctx context.Context, k *kube.Client, node, key string) {
 	ginkgo.GinkgoHelper()
 	ginkgo.By(fmt.Sprintf("node %s has no label %s", node, key))
@@ -142,9 +142,9 @@ func NodeLabelAbsent(ctx context.Context, k *kube.Client, node, key string) {
 // list with item as one of its ELEMENTS. This is the ownership half of the
 // provenance guard: NFD records every label it owns in
 // nfd.node.kubernetes.io/feature-labels, and a label written by anything else
-// (a `kubectl label` in setup.sh, say) never appears there — so presence of the
-// label plus membership here is the direct discriminator, independent of any
-// ordering argument.
+// (a direct node patch from setup.sh, say) never appears there — so presence of
+// the label plus membership here is the direct discriminator, independent of
+// any ordering argument.
 //
 // Membership, never strings.Contains on the raw value: a substring match would
 // also accept a neighbouring entry that merely contains item (`xpci-10de.presentx`).

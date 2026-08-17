@@ -969,15 +969,25 @@ namespace, on the pod IP where the kubelet reaches it.
 
 ### Node Labels
 
-The DaemonSet's `setup.sh` writes one node label directly with `kubectl label`,
-and drops a feature file that NFD turns into a second. The preStop `cleanup.sh`
-removes the first label and deletes the feature file; NFD retires the second
-label itself on its next cycle:
+The DaemonSet's `setup.sh` writes one node label directly through the API
+server, and drops a feature file that NFD turns into a second. The preStop
+teardown removes the first label and, when `nodeLabels.pciVendorPresent` is
+enabled, deletes the feature file; NFD retires the second label itself on its
+next cycle:
 
 | Label | Written by | Gated by | Default |
 |-------|-----------|----------|---------|
-| `nvidia.com/gpu.present=true` | nvml-mock (`kubectl label`) | not gated — always written | n/a |
+| `nvidia.com/gpu.present=true` | nvml-mock (`nvml-mock-node label`, client-go) | not gated — always written | n/a |
 | `feature.node.kubernetes.io/pci-10de.present=true` | **NFD**, from a feature file nvml-mock writes | `nodeLabels.pciVendorPresent` | `true` |
+
+> **Upgrading:** the chart renders the preStop hook's `nvml-mock-node teardown`
+> argv itself, so this chart version needs an image built from the commit that
+> introduced that binary or later. (The labelling step is not part of the
+> contract: it is invoked by `setup.sh`, which ships inside the image and so
+> always matches it.) With the default `image.tag: latest` and
+> `pullPolicy: IfNotPresent` a node still holding an older cached image fails the
+> preStop hook on every termination and cleans nothing up, so pull a fresh image
+> (or pin a digest) when upgrading.
 
 The second label is produced by Node Feature Discovery. nvml-mock only supplies
 the input: it writes `pci-10de.present=true` into
@@ -991,8 +1001,8 @@ host-prefixed sysfs path fixed at link time (`/host-sys/bus/pci/devices`, from
 `HOSTMOUNT_PREFIX`), while nvml-mock's rendered PCI tree lives under
 `/var/lib/nvml-mock/sys` and is reachable at the canonical `/sys` path only
 through an `LD_PRELOAD` sysfs shim — and `nfd-worker` ships statically linked,
-so `LD_PRELOAD` is inert in it. Either fact alone is enough; both hold. The
-`setup.sh` comment at step 7 carries the full analysis with upstream file
+so `LD_PRELOAD` is inert in it. Either fact alone is enough; both hold.
+`pkg/node/labels`' package comment carries the full analysis with upstream file
 references (verified against NFD v0.19.0).
 
 That is a limit of how NFD is deployed, not of the rendered tree. Pointed at
@@ -1015,11 +1025,11 @@ helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
 ```
 
 `setup.sh` converges either way: with the switch on it writes the feature file,
-with it off it removes any file an earlier run left behind. `cleanup.sh` reads
-the same switch and unwinds only the write `setup.sh` makes, so with the switch
-off it has nothing to undo. Because the label itself belongs to NFD, disabling
-the switch does not delete an existing label directly; NFD retires it on its
-next discovery cycle once the feature file is gone.
+with it off it removes any file an earlier run left behind. The preStop
+teardown reads the same switch and unwinds only the write `setup.sh` makes, so
+with the switch off it has nothing to undo. Because the label itself belongs to
+NFD, disabling the switch does not delete an existing label directly; NFD
+retires it on its next discovery cycle once the feature file is gone.
 
 Writing a feature file rather than the label is also why the DaemonSet needs no
 `patch` on `nodes` for this key — `nvidia.com/gpu.present` is the only label it
