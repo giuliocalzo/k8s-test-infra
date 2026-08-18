@@ -31,6 +31,13 @@ so all consumers and applications up the stack work without modifications.
 - When changing Golang codebase, make sure `make lint-fix` works without violations. Run `make test` to run changes against existing test suite.
 - When modify helm chart, make sure to run `make helm-tests` in order to ensure that the Helm chart is not broken.
 
+## Changelog
+
+- Entries are [changie](https://changie.dev) fragments. Never edit `CHANGELOG.md` — it holds released versions only and is written at release time.
+- Add one with `make changelog KIND=<kind> BODY="..." [ISSUE=<number>]`. Valid kinds: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
+- Add a fragment on every PR that changes behavior (feature, bug fix, API change, security bump). Skip refactors, docs, tests and CI, and apply the `skip-changelog` label instead — CI fails a PR with neither.
+- Commit the fragment with the code. Fragments never conflict between PRs, so no coordination is needed.
+
 ## CI/CD
 
 - Github Actions must be used for CI/CD

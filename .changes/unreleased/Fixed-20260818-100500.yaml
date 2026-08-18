@@ -1,0 +1,12 @@
+kind: Fixed
+body: |-
+  mocknvml: the internal export-table shim no longer writes a process list into
+    memory the caller never handed it. Every table slot pointed at one stub, so
+    the process-list call was recognised from the shape of its arguments; slots
+    that take fewer arguments left a stale register in the position the stub read
+    as the array pointer, and any configured `processes:` entry was then written
+    through it. On arm64 that faulted, so `nvidia-smi -q` (and `-q -x`) died with
+    a SIGSEGV mid-output as soon as a process was configured; elsewhere it wrote
+    into whatever the stale value addressed. Each slot now has its own trampoline
+    and only the three slots that carry a process array are filled.
+time: 2026-08-18T10:05:00Z

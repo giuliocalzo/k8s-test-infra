@@ -1,0 +1,12 @@
+kind: Fixed
+body: |-
+  Report `GPU C2C Mode` in `nvidia-smi -q` from `nvlink.c2c_enabled`.
+    `nvmlDeviceGetC2cModeInfoV` was a generated stub, so the Grace-Blackwell
+    profiles (`gb200`, `gb300`) reported `N/A` for the NVLink-C2C link to the
+    Grace CPU that defines them, silently dropping a configured value. Boards
+    with no such link keep reporting `N/A`, which is correct for them: `a100`,
+    `h100` and `b200` set `c2c_enabled: false`, `l40s` and `t4` omit the key, and
+    both cases answer `NVML_ERROR_NOT_SUPPORTED`.
+time: 2026-08-18T10:07:00Z
+custom:
+  Issue: "639"
