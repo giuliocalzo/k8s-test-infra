@@ -1,0 +1,4 @@
+kind: Added
+body: |-
+  Changelog entries are now recorded as `changie` fragments under `.changes/unreleased/` — run `make changelog` instead of editing `CHANGELOG.md`, which is folded at release time and so never conflicts between PRs.
+time: 2026-08-18T15:40:07Z

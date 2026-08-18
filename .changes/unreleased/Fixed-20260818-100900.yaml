@@ -1,0 +1,14 @@
+kind: Fixed
+body: |-
+  mocknvml: `nvidia-smi -q` and `nvidia-smi --query-compute-apps` no longer
+    report hundreds of phantom processes (PID 0, empty name, 0 MiB) per GPU when
+    no processes are configured. nvidia-smi enumerates processes through the
+    internal export table, whose catch-all C stub returned `NVML_SUCCESS` without
+    writing back the caller's count, so nvidia-smi rendered its uninitialized
+    buffer. The stub now writes back a real count for the per-device process-list
+    call. Unrecognized internal calls still return `NVML_SUCCESS`: every slot of
+    the export table points at the same stub, and `nvidia-smi topo -m` aborts with
+    "Failed to run topology matrix" on any error from it. nvidia-smi does not fall
+    back to the public process APIs for these views. E2E `NvidiaSMI` gained a
+    regression guard.
+time: 2026-08-18T10:09:00Z

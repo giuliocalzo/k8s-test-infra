@@ -69,8 +69,9 @@ Open an issue using the [feature request template](.github/ISSUE_TEMPLATE/featur
 1. Fork the repository
 2. Create a feature branch from `main`
 3. Make your changes with tests
-4. Ensure all checks pass (see Testing below)
-5. Submit a pull request
+4. Record a changelog entry with `make changelog` (see [Changelog](#changelog))
+5. Ensure all checks pass (see Testing below)
+6. Submit a pull request
 
 ## Pull Request Process
 
@@ -78,6 +79,42 @@ Open an issue using the [feature request template](.github/ISSUE_TEMPLATE/featur
 2. **Tests required** — new features need tests; bug fixes need regression tests
 3. **CI must pass** — all checks (lint, unit tests, E2E) must be green
 4. **Review required** — at least one maintainer approval from [OWNERS](OWNERS)
+5. **Changes logged** — behavior changes need a changelog fragment, or the
+   `skip-changelog` label
+
+## Changelog
+
+Entries are [changie](https://changie.dev) fragments. Do not edit
+`CHANGELOG.md` directly: it holds released versions only and is written at
+release time, so fragments never conflict between PRs or backports.
+
+```bash
+# Interactive prompts
+make changelog
+
+# Non-interactive
+make changelog KIND=Fixed BODY="nvidia-smi reports configured JPEG utilization" ISSUE=637
+```
+
+Kinds are `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` and `Security`.
+Either form writes a timestamped file under `.changes/unreleased/` — commit it
+with your code. For a long entry, wrap the `body:` block in that file the way
+existing `CHANGELOG.md` entries are wrapped.
+
+Add a fragment on every PR that changes behavior: a feature, a bug fix, an API
+change, a security-relevant bump. Skip refactors, docs, tests and CI changes and
+apply the `skip-changelog` label instead — CI fails a PR that has neither.
+Dependabot PRs are exempt through the `dependencies` label.
+
+### Cutting a release (maintainers)
+
+```bash
+make changelog-preview RELEASE_VERSION=0.4.0   # render the section, write nothing
+make changelog-release RELEASE_VERSION=0.4.0   # fold fragments into CHANGELOG.md, clear them
+```
+
+Pass the version unprefixed — headings read `## [0.4.0]` while the tag is
+`v0.4.0` — and open the result as the release PR.
 
 ## Testing
 
