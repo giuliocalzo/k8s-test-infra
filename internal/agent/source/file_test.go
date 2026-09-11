@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -520,4 +521,146 @@ devices:
 	for _, d := range state.Devices {
 		require.Equal(t, ec.GetDeviceMinorNumber(d.Index), d.MinorNumber, "device %d", d.Index)
 	}
+}
+
+func TestCompileState_MIGFromProfile(t *testing.T) {
+	data := []byte(`
+version: "1.0"
+system:
+  num_devices: 2
+device_defaults:
+  name: "NVIDIA A100-SXM4-40GB"
+  memory:
+    total_bytes: 42949672960
+  mig:
+    mode_current: "enabled"
+    mode_pending: "enabled"
+    max_gpu_instances: 7
+    gpu_instances:
+      - profile: "1g.5gb"
+        count: 3
+`)
+
+	state, err := compileState(data)
+	require.NoError(t, err)
+
+	require.True(t, state.MIG.Partitioned())
+	require.Equal(t, 236, state.MIG.CapsMajor)
+	require.Len(t, state.MIG.GPUs, 2)
+	for i, gpu := range state.MIG.GPUs {
+		// The capability names key on the GPU's device-node minor, which this
+		// profile leaves implicit, so it follows the index.
+		require.Equal(t, i, gpu.Minor)
+		require.Len(t, gpu.GPUInstances, 3)
+		for _, gi := range gpu.GPUInstances {
+			require.Len(t, gi.ComputeInstances, 1)
+			require.Equal(t, uint32(0), gi.ComputeInstances[0].ID)
+			require.NotEmpty(t, gi.ComputeInstances[0].UUID)
+		}
+	}
+}
+
+// TestCompileState_MIGDisabledInEveryShippedProfile pins the deliberate default:
+// a MIG-capable profile declares what it could be partitioned into but boots
+// with MIG off, because migStrategy=single stops publishing nvidia.com/gpu the
+// moment a board is partitioned, which would change every existing e2e leg.
+func TestCompileState_MIGDisabledInEveryShippedProfile(t *testing.T) {
+	profiles, err := filepath.Glob(helmProfileGlob)
+	require.NoError(t, err)
+	require.NotEmpty(t, profiles)
+
+	for _, path := range profiles {
+		if strings.Contains(filepath.Base(path), "-mig") {
+			continue // the MIG profiles exist precisely to boot partitioned
+		}
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+
+			state, err := compileState(data)
+			require.NoError(t, err)
+			require.False(t, state.MIG.Partitioned(),
+				"%s must boot unpartitioned", filepath.Base(path))
+		})
+	}
+}
+
+// TestCompileState_DeclaredMIGPartitionsAllResolve guards the profiles against
+// a typo in a partition name. An unresolvable name is only warned about and
+// skipped, so without this the profile would quietly produce fewer partitions
+// than it declares — visible only as a smaller allocatable count in a cluster.
+func TestCompileState_DeclaredMIGPartitionsAllResolve(t *testing.T) {
+	profiles, err := filepath.Glob(helmProfileGlob)
+	require.NoError(t, err)
+	require.NotEmpty(t, profiles)
+
+	sawPartitionedProfile := false
+	for _, path := range profiles {
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+
+		var cfg engine.YAMLConfig
+		require.NoError(t, yaml.Unmarshal(data, &cfg))
+		if cfg.DeviceDefaults.MIG == nil || len(cfg.DeviceDefaults.MIG.GPUInstances) == 0 {
+			continue
+		}
+		sawPartitionedProfile = true
+
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			declared := 0
+			for _, gi := range cfg.DeviceDefaults.MIG.GPUInstances {
+				declared += max(gi.Count, 1)
+			}
+
+			// Enable MIG the way gpu.mig.enabled does, since the layout is
+			// inert while the profile leaves the mode off.
+			cfg.DeviceDefaults.MIG.ModeCurrent = "enabled"
+			layout := engine.DeclaredMIGLayout(&engine.Config{NumDevices: 1, YAMLConfig: &cfg})
+
+			require.Len(t, layout, 1)
+			require.Len(t, layout[0].GPUInstances, declared,
+				"every declared partition must resolve and fit")
+			for _, gi := range layout[0].GPUInstances {
+				require.NotEmpty(t, gi.Profile)
+				require.NotEmpty(t, gi.ComputeInstances)
+			}
+		})
+	}
+	require.True(t, sawPartitionedProfile, "no profile declares MIG partitions; has the block moved?")
+}
+
+// A profile is free to number the device nodes independently of the NVML
+// index, and the MIG capability names have to follow the nodes gpudriver
+// actually creates. Keying them on the index instead would point a consumer
+// at another GPU's cap devices on exactly the profiles that renumber.
+func TestCompileState_MIGCapsFollowTheDeviceMinor(t *testing.T) {
+	data := []byte(`
+version: "1.0"
+system:
+  num_devices: 2
+device_defaults:
+  name: "NVIDIA A100-SXM4-40GB"
+  memory:
+    total_bytes: 42949672960
+  mig:
+    mode_current: "enabled"
+    mode_pending: "enabled"
+    gpu_instances:
+      - profile: "1g.5gb"
+        count: 1
+devices:
+  - index: 0
+    minor_number: 5
+  - index: 1
+    minor_number: 4
+`)
+
+	state, err := compileState(data)
+	require.NoError(t, err)
+	require.True(t, state.MIG.Partitioned())
+	require.Len(t, state.MIG.GPUs, 2)
+
+	minors := []int{state.MIG.GPUs[0].Minor, state.MIG.GPUs[1].Minor}
+	require.Equal(t, []int{5, 4}, minors,
+		"cap names must use the profile's minor numbers, not the NVML indices")
 }

@@ -95,12 +95,13 @@ func newCLI(stdout, stderr io.Writer) *cli.Command {
 			nvlinkErrorCommand(),
 			sramECCCommand(),
 			fabricHealthCommand(),
+			migCommand(),
 			setCommand(),
 			statusCommand(),
 			resetCommand(),
 			watchAllocationsCommand(),
 		},
-		Action:    rootAction,
+		Action:    usageAction,
 		Writer:    stdout,
 		ErrWriter: stderr,
 		// The default handler prints the error and exits the process itself;
@@ -111,9 +112,12 @@ func newCLI(stdout, stderr io.Writer) *cli.Command {
 	return root
 }
 
-// rootAction runs when no subcommand matched. The binary does nothing on its
-// own, so a bare invocation and an unknown command are both usage errors.
-func rootAction(_ context.Context, cmd *cli.Command) error {
+// usageAction runs when no subcommand matched, on the root or on a command
+// that only groups verbs. Neither does anything on its own, so a bare
+// invocation and an unknown subcommand are both usage errors. reportUsage
+// picks the help template from the command it is given, so the same action
+// serves both.
+func usageAction(_ context.Context, cmd *cli.Command) error {
 	if name := cmd.Args().First(); name != "" {
 		fprintf(cmd.Root().ErrWriter, "unknown command %q\n\n", name)
 	}
@@ -138,8 +142,15 @@ func reportUsageErrors(cmd *cli.Command) {
 // carrying an empty message, marking the failure as already reported.
 func reportUsage(cmd *cli.Command) error {
 	template := cli.CommandHelpTemplate
-	if cmd == cmd.Root() {
+	switch {
+	case cmd == cmd.Root():
 		template = cli.RootCommandHelpTemplate
+	case len(cmd.VisibleCommands()) > 0:
+		// CommandHelpTemplate renders no COMMANDS section, so a command that
+		// groups verbs would report the verbs nowhere — on the very path an
+		// operator reaches by forgetting one. VisibleCommands is the same test
+		// the library applies when it picks a template for `--help`.
+		template = cli.SubcommandHelpTemplate
 	}
 	// The library's ShowHelp helpers always write to the root's stdout writer;
 	// help printed because an invocation was wrong belongs on stderr.
