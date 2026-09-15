@@ -122,6 +122,16 @@ device_defaults:
     rx_throughput_kbps: 0
 ```
 
+`lspci` sees these through the rendered sysfs tree and enumerates every GPU, but
+two of its lines are missing next to real hardware. `Kernel driver in use:
+nvidia` needs a `driver` symlink, which the tree does not render and the
+`libpcisysfs` shim could not surface anyway — it intercepts `open`/`stat`, not
+`readlink`. `Kernel modules:` needs libkmod, which fails to initialise in a
+container with no `/lib/modules`; that is where the `Unable to load libkmod
+resources: error -2` on `lspci -v` comes from, and a container on real hardware
+prints it too. Both are display-only: `lspci` still exits 0, and a consumer
+reading identity out of sysfs gets the full picture.
+
 ### Platform identity (rack location)
 
 Where the node's boards sit in a rack, which `nvidia-smi -q` renders as its
@@ -436,6 +446,79 @@ device_defaults:
     max_gpu_instances: 7
 ```
 
+This is the reference for the `mig:` block. For installing a partitioned node
+and scheduling onto a slice, see the
+[MIG partitioning guide](guides/mig.md).
+
+No shipped profile declares a partitioning. `max_gpu_instances` is what the
+board can do; how it is carved is a deployment choice, which under the chart is
+`gpu.mig.gpuInstances` — required whenever `gpu.mig.enabled` is set, on every
+board. Boards with no `mig` block at all — `t4`, `l40s` — are not MIG-capable,
+and NVML answers `NVML_ERROR_NOT_SUPPORTED` for them as real hardware does.
+
+#### Declaring a layout by count
+
+`gpu_instances` asks for a number of identical instances. Name each profile
+either by name or by the id the board publishes for it:
+
+```yaml
+devices:
+  - index: 0
+    mig:
+      mode_current: "enabled"
+      gpu_instances:
+        - profile: "3g.20gb"   # by name
+          count: 2
+        - profile_id: 19       # by id: 1g.5gb on an A100
+          count: 1
+```
+
+| Field | Meaning |
+|---|---|
+| `profile` | Profile name as the cluster spells it, e.g. `1g.10gb`, `1g.5gb+me` |
+| `profile_id` | Raw id instead of a name. Exactly one of the two |
+| `count` | How many identical instances. Defaults to 1 |
+| `compute_instances` | Compute slices inside each GPU instance, same `profile`/`profile_id`/`count` shape. Defaults to one spanning the whole GPU instance, which is what `nvidia-mig-parted` creates |
+
+`profile_id` is the id in the `ID` column of `nvidia-smi mig -lgip`, so it can
+be copied straight off that listing — not NVML's profile enum, which numbers
+the same profiles differently and in the opposite order.
+
+#### Declaring a layout explicitly
+
+`instances` states exactly which GPU instances exist, with the ids they were
+created under. A count cannot express a layout with a hole in it — delete
+instance 1 of three and the survivors are 0 and 2, which `count: 2` would
+reload as 0 and 1 — so this is the form a runtime mutation records, and the
+form to use when an instance needs a fixed id:
+
+```yaml
+device_defaults:
+  mig:
+    mode_current: "enabled"
+    max_gpu_instances: 7
+    instances:
+      - id: 0
+        profile: "1g.10gb"
+        compute_instances:
+          - id: 0
+            profile: "1c"
+      - id: 2                  # 1 is deliberately absent
+        profile: "1g.10gb"
+        placement_start: 2     # optional; omitted takes the first free slot
+```
+
+Fixed ids are what let a partition be deleted by id from a process that did not
+create it, and what keeps `nvidia-smi -L` reporting the same MIG UUIDs across
+processes. A changed layout is applied by difference: only the missing instances
+are created and only the superfluous ones destroyed, so a consumer already
+holding handles follows a repartition instead of losing them.
+
+An empty `instances: []` is a MIG-enabled board with every instance deleted,
+which is distinct from omitting the key; the same holds for a GPU instance's
+`compute_instances`, since deleting the last compute instance is a state
+hardware has.
+
 ### InfoROM
 
 ```yaml
@@ -732,6 +815,93 @@ and counters, clocks, fan speed, performance state, power limits, `processes`,
 and failure injection. Each holds its configured value until the profile changes
 or `nvml-mock-ctl` writes a runtime override, which takes effect within one
 override TTL — see [nvml-mock-ctl](nvml-mock-ctl.md).
+
+Two of these also accept writes from the consumer, and they differ in how far
+the write reaches.
+
+The power management limit (`nvidia-smi -pl`, in milliwatts and inclusive of
+`min_limit_mw` / `max_limit_mw`; a cap outside those bounds is refused) is
+recorded in the runtime override document, so it behaves like the driver-level
+write it models: every process on the node reads the new cap, including ones
+started afterwards, and it holds until a reset clears it (`nvidia-smi -r`, or
+`nvml-mock-ctl reset`). A cap moves both the power management limit and the
+enforced limit, but not `default_limit_mw`. A mock with nowhere to record the
+write — no config, or an overrides file it cannot write — refuses the cap with
+`NVML_ERROR_NO_PERMISSION` rather than reporting a success that nothing would
+observe.
+
+Persistence mode (`nvidia-smi -pm`) is the exception: it is still held in the
+process that loaded the mock, so a second process reads the configured value.
+
+### Workload power profiles
+
+`power.workload_power_profiles` opts a device into the Blackwell workload power
+profile feature, which `nvidia-smi power-profiles` reads and writes. Absent — the
+default — the device declines the feature the way every pre-Blackwell board does.
+`requested` seeds the set a consumer sees until one of the setters overrides it:
+
+```yaml
+power:
+  workload_power_profiles:
+    supported:
+      - id: 0                  # NVML_POWER_PROFILE_MAX_P, rendered "Max-P"
+        priority: 10           # lower value wins arbitration
+        conflicts: [1, 5]      # cannot be enforced alongside these
+      - id: 6                  # "LLM Inference"
+        priority: 40
+    requested: []              # profile ids to ask for
+```
+
+`id` is an `NVML_POWER_PROFILE_*` index (0-254) and doubles as the profile's bit
+position in NVML's 255-bit masks, so ids must be unique. It is also what
+nvidia-smi renders as the name: `-l` lists the supported set, `-ld` adds the
+priority and conflicts, `-gr` and `-ge` report the requested and enforced sets,
+and `-sr` / `-cr` add to and remove from the requested set.
+
+Requested and enforced differ because asking for mutually exclusive profiles is
+allowed: enforced is what survives arbitration, dropping any profile that
+conflicts with a higher-priority one that was also requested. A requested id the
+device does not advertise is ignored in config, but refused with
+`NVML_ERROR_INVALID_ARGUMENT` when a consumer asks for it at runtime.
+
+`requested` is empty in the shipped profiles, because every real GB200, GB300 and
+B200 capture reports no requested or enforced profile — which is what
+`nvidia-smi -q -x` renders as `N/A` in its `<power_profiles>` block.
+
+A write outranks `requested` from the moment it lands, and like `nvidia-smi -pl`
+it is recorded in the runtime override document rather than in the writing
+process — so a later `nvidia-smi` reads it back, and it holds until a reset:
+
+```console
+$ nvidia-smi power-profiles -sr 2 -i 0
+Successfully set the requested profiles.
+$ nvidia-smi power-profiles -gr -i 0
+2. Compute
+```
+
+Within a single invocation only `-ge` reflects a write, because nvidia-smi
+evaluates `-sr` and `-cr` before `-ge` but after `-gr`:
+
+```console
+$ nvidia-smi power-profiles -sr 0,2 -cr 0 -ge -i 0
+Successfully set the requested profiles.
+Successfully cleared the requested profiles.
+2. Compute
+```
+
+Because the request persists, a consumer that wants the board back at its
+configured state has to clear what it asked for, or reset the device. Two further nvidia-smi
+behaviours are worth knowing, neither of them the mock's: it refuses an id the
+board does not advertise before calling NVML at all, and it applies a
+comma-separated list in full only to the first GPU it visits, passing just the
+first profile to the rest.
+
+Two axes decide whether the feature answers at all, and they fail differently. A
+device that declares no `workload_power_profiles` reports the feature as
+unsupported; one whose `system.driver_version` is older than 570 does not export
+the symbols, so nvidia-smi cannot find the function. Of the shipped profiles only
+`gb200` and `gb300` satisfy both — `b200` is Blackwell but pins driver 560, which
+predates the API.
 
 ### Deliberately fixed
 

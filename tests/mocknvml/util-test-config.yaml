@@ -10,7 +10,10 @@ version: "1.0"
 # System-level configuration
 # =============================================================================
 system:
-  driver_version: "550.163.01"
+  # 570 or newer is load-bearing for the workload power profile tests below:
+  # the version registry reports those symbols as absent on an older driver, so
+  # the harness would never reach the getters themselves.
+  driver_version: "580.65.06"
   nvml_version: "12.550.163.01"
   cuda_version: "12.4"
   cuda_version_major: 12
@@ -101,6 +104,26 @@ device_defaults:
     max_limit_mw: 400000            # 400W
     current_draw_mw: 72000          # 72W idle
     power_state: "P0"               # P0-P12
+
+    # Declared so the harness reaches the workload profile getters rather than
+    # their NOT_SUPPORTED path: ProfilesInfo is the largest struct the bridge
+    # writes (~11 KB of 255-entry array behind two masks), and this is the only
+    # test that drives that write across the C boundary. The ids are
+    # non-contiguous on purpose — perfProfile is indexed by profile id, so a
+    # gap is what catches an entry written to the wrong slot.
+    workload_power_profiles:
+      supported:
+        - id: 0                     # max_p
+          priority: 10
+          conflicts: [1, 5]
+        - id: 1                     # max_q
+          priority: 20
+          conflicts: [0, 5]
+        - id: 5                     # balanced
+          priority: 30
+          conflicts: [0, 1]
+        - id: 13                    # hpc
+          priority: 40
 
   # ---------------------------------------------------------------------------
   # Thermal configuration
@@ -369,6 +392,18 @@ devices:
     pci:
       bus_id: "0000:47:00.0"
     minor_number: 2
+    # Boots already partitioned into the uniform layout migStrategy=single
+    # requires, so testMIG covers the declared path over the real C ABI while
+    # device 0 stays unpartitioned for the runtime create/destroy path. This
+    # also pins the per-device override merge: `mig` was silently dropped
+    # before, which would leave this device looking like the defaults.
+    mig:
+      mode_current: "enabled"
+      mode_pending: "enabled"
+      max_gpu_instances: 7
+      gpu_instances:
+        - profile: "1g.5gb"
+          count: 7
 
   - index: 3
     uuid: "GPU-12345678-1234-1234-1234-123456780003"
@@ -376,6 +411,14 @@ devices:
     pci:
       bus_id: "0000:4E:00.0"
     minor_number: 3
+    # The only graphics process in the fixture, so the graphics running-process
+    # query has a non-empty answer to probe: the defaults run a compute process
+    # and device 1 runs none, which between them cover neither.
+    processes:
+      - pid: 5150
+        type: "G"
+        name: "Xorg"
+        used_memory_mib: 128
 
   - index: 4
     uuid: "GPU-12345678-1234-1234-1234-123456780004"

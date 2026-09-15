@@ -8,8 +8,8 @@ should match snapshot with all overrides:
         app.kubernetes.io/instance: custom
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: nvml-mock-custom
     spec:
       selector:
@@ -19,7 +19,7 @@ should match snapshot with all overrides:
       template:
         metadata:
           annotations:
-            checksum/config: fccb5cf9ce1dc2d717ff75f1a57dac8f1581c95d6f8fc5c4138493a21edeba58
+            checksum/config: 5f60b3ba88c53f04c2834ac3d0a531afe660954c5fcd16715829e26f050efeea
           labels:
             app.kubernetes.io/component: daemon
             app.kubernetes.io/instance: custom
@@ -68,7 +68,7 @@ should match snapshot with all overrides:
                 - name: MOCK_IB_PING_SOCKET
                   value: /var/lib/nvml-mock/run/mock-ib.sock
                 - name: LD_PRELOAD
-                  value: /usr/local/lib/libibmockumad.so.1:/usr/local/lib/libibmockverbs.so.1:/usr/local/lib/libibmocksys.so.1:/usr/local/lib/libpcisysfs.so.1
+                  value: /usr/local/lib/libibmockumad.so.1:/usr/local/lib/libibmockverbs.so.1:/usr/local/lib/libibmocksys.so.1:/usr/local/lib/libmockfs.so.1
                 - name: MOCK_IB_ROOT
                   value: /var/lib/nvml-mock/ib
                 - name: MOCK_PCI_ROOT
@@ -171,8 +171,8 @@ should match snapshot with b200 profile:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock
     spec:
       selector:
@@ -182,7 +182,7 @@ should match snapshot with b200 profile:
       template:
         metadata:
           annotations:
-            checksum/config: c31fe3cb55c5bfe18a4905911287a9f08fdaef0d3be553d218b4ce16cab429d8
+            checksum/config: c9d6ae63b141c3123eae5793754730a4aa4b131aa40ab061024b9b38c0840944
           labels:
             app.kubernetes.io/component: daemon
             app.kubernetes.io/instance: RELEASE-NAME
@@ -229,7 +229,7 @@ should match snapshot with b200 profile:
                 - name: MOCK_IB_PING_SOCKET
                   value: /var/lib/nvml-mock/run/mock-ib.sock
                 - name: LD_PRELOAD
-                  value: /usr/local/lib/libibmockumad.so.1:/usr/local/lib/libibmockverbs.so.1:/usr/local/lib/libibmocksys.so.1:/usr/local/lib/libpcisysfs.so.1
+                  value: /usr/local/lib/libibmockumad.so.1:/usr/local/lib/libibmockverbs.so.1:/usr/local/lib/libibmocksys.so.1:/usr/local/lib/libmockfs.so.1
                 - name: MOCK_IB_ROOT
                   value: /var/lib/nvml-mock/ib
                 - name: MOCK_PCI_ROOT
@@ -322,8 +322,8 @@ should match snapshot with default values:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock
     spec:
       selector:
@@ -333,7 +333,7 @@ should match snapshot with default values:
       template:
         metadata:
           annotations:
-            checksum/config: c6dfd465923cdd4faa1c33e2324dec08654aa238f27ea884499079f4680f5578
+            checksum/config: 77316ad0de46327f19551c1b718d19ad0a45abfb3290336859869457dc578556
           labels:
             app.kubernetes.io/component: daemon
             app.kubernetes.io/instance: RELEASE-NAME
@@ -382,7 +382,7 @@ should match snapshot with default values:
                 - name: MOCK_IB_PING_SOCKET
                   value: /var/lib/nvml-mock/run/mock-ib.sock
                 - name: LD_PRELOAD
-                  value: /usr/local/lib/libibmockumad.so.1:/usr/local/lib/libibmockverbs.so.1:/usr/local/lib/libibmocksys.so.1:/usr/local/lib/libpcisysfs.so.1
+                  value: /usr/local/lib/libibmockumad.so.1:/usr/local/lib/libibmockverbs.so.1:/usr/local/lib/libibmocksys.so.1:/usr/local/lib/libmockfs.so.1
                 - name: MOCK_IB_ROOT
                   value: /var/lib/nvml-mock/ib
                 - name: MOCK_PCI_ROOT

@@ -294,11 +294,15 @@ should match snapshot with a100 profile:
           # ---------------------------------------------------------------------------
           # MIG configuration
           # ---------------------------------------------------------------------------
+          # MIG ships off because a partitioned board stops publishing nvidia.com/gpu
+          # under migStrategy=single. How a board is carved is a deployment choice
+          # rather than a property of the silicon, so no layout is declared here:
+          # --set gpu.mig.enabled=true needs gpu.mig.gpuInstances to supply one. Seven
+          # 1g.5gb instances is what nvidia-mig-parted's all-1g.5gb config produces.
           mig:
             mode_current: "disabled"
             mode_pending: "disabled"
             max_gpu_instances: 7            # A100 supports up to 7 MIG instances
-            # GPU instances would be defined here if MIG enabled
 
           # ---------------------------------------------------------------------------
           # GPU operation mode (GOM)
@@ -478,8 +482,8 @@ should match snapshot with a100 profile:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock-config
 should match snapshot with b200 profile:
   1: |
@@ -782,6 +786,14 @@ should match snapshot with b200 profile:
           # ---------------------------------------------------------------------------
           # MIG configuration
           # ---------------------------------------------------------------------------
+          # MIG ships off because a partitioned board stops publishing nvidia.com/gpu
+          # under migStrategy=single. How a board is carved is a deployment choice
+          # rather than a property of the silicon, so no layout is declared here:
+          # --set gpu.mig.enabled=true needs gpu.mig.gpuInstances to supply one.
+          # This board declares 192GiB, so its smallest slice is 1g.24gb and seven of
+          # them fills it. NVIDIA publishes 1g.23gb for a 180GB B200; a slice is named
+          # for the share of its own board it holds, so take the names from
+          # `nvidia-smi mig -lgip`.
           mig:
             mode_current: "disabled"
             mode_pending: "disabled"
@@ -957,8 +969,8 @@ should match snapshot with b200 profile:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock-config
 should match snapshot with default gb300 profile:
   1: |
@@ -1102,6 +1114,31 @@ should match snapshot with default gb300 profile:
             current_draw_mw: 175000         # 175W idle (liquid cooled)
             power_state: "P0"
             total_energy_consumption_mj: 1000000  # millijoules since boot
+
+            # Same Blackwell workload power profile set as GB200 — see that profile for
+            # why `requested` is empty. The b200 profile omits this section because it
+            # pins driver 560, which predates the API.
+            workload_power_profiles:
+              supported:
+                - id: 0                     # max_p: highest performance
+                  priority: 10
+                  conflicts: [1, 5]
+                - id: 1                     # max_q: highest efficiency
+                  priority: 20
+                  conflicts: [0, 5]
+                - id: 5                     # balanced
+                  priority: 30
+                  conflicts: [0, 1]
+                - id: 2                     # compute
+                  priority: 40
+                - id: 3                     # memory_bound
+                  priority: 40
+                - id: 6                     # llm_inference
+                  priority: 40
+                - id: 7                     # llm_training
+                  priority: 40
+                - id: 13                    # hpc
+                  priority: 40
 
           # ---------------------------------------------------------------------------
           # Thermal configuration (same liquid-cooled envelope as GB200)
@@ -1486,8 +1523,8 @@ should match snapshot with default gb300 profile:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock-config
 should match snapshot with gb200 profile:
   1: |
@@ -1629,6 +1666,36 @@ should match snapshot with gb200 profile:
             current_draw_mw: 145000         # 145W idle
             power_state: "P0"
             total_energy_consumption_mj: 1000000  # millijoules since boot
+
+            # Workload power profiles, which NVML scopes to Blackwell and newer. ids
+            # are NVML_POWER_PROFILE_* indices and are what `nvidia-smi power-profiles`
+            # renders as names. The set below models a datacenter part: the three
+            # operating points are mutually exclusive, while the workload-shape hints
+            # combine freely. `requested` is deliberately empty — every real GB200,
+            # GB300 and B200 capture under
+            # tests/e2e/go/assertions/nvidiasmi/testdata/hardware reports N/A for the
+            # requested and enforced profiles, and that is what an empty set renders as.
+            workload_power_profiles:
+              supported:
+                - id: 0                     # max_p: highest performance
+                  priority: 10
+                  conflicts: [1, 5]
+                - id: 1                     # max_q: highest efficiency
+                  priority: 20
+                  conflicts: [0, 5]
+                - id: 5                     # balanced
+                  priority: 30
+                  conflicts: [0, 1]
+                - id: 2                     # compute
+                  priority: 40
+                - id: 3                     # memory_bound
+                  priority: 40
+                - id: 6                     # llm_inference
+                  priority: 40
+                - id: 7                     # llm_training
+                  priority: 40
+                - id: 13                    # hpc
+                  priority: 40
 
           # ---------------------------------------------------------------------------
           # Thermal configuration
@@ -2015,8 +2082,8 @@ should match snapshot with gb200 profile:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock-config
 should match snapshot with h100 profile:
   1: |
@@ -2327,6 +2394,11 @@ should match snapshot with h100 profile:
           # ---------------------------------------------------------------------------
           # MIG configuration
           # ---------------------------------------------------------------------------
+          # MIG ships off because a partitioned board stops publishing nvidia.com/gpu
+          # under migStrategy=single. How a board is carved is a deployment choice
+          # rather than a property of the silicon, so no layout is declared here:
+          # --set gpu.mig.enabled=true needs gpu.mig.gpuInstances to supply one. Seven
+          # 1g.10gb instances is what nvidia-mig-parted's all-1g.10gb config produces.
           mig:
             mode_current: "disabled"
             mode_pending: "disabled"
@@ -2510,8 +2582,8 @@ should match snapshot with h100 profile:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock-config
 should match snapshot with l40s profile:
   1: |
@@ -2804,13 +2876,9 @@ should match snapshot with l40s profile:
           # ---------------------------------------------------------------------------
           compute_mode: "default"
 
-          # ---------------------------------------------------------------------------
-          # MIG configuration (L40S does not support MIG)
-          # ---------------------------------------------------------------------------
-          mig:
-            mode_current: "disabled"
-            mode_pending: "disabled"
-            max_gpu_instances: 0
+          # No mig section: the L40S is not a MIG-capable board, and the mock derives
+          # that from the board name, so NVML answers NVML_ERROR_NOT_SUPPORTED without
+          # the profile having to declare a disabled mode it can never leave.
 
           # ---------------------------------------------------------------------------
           # GPU operation mode (GOM)
@@ -2950,8 +3018,8 @@ should match snapshot with l40s profile:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock-config
 should match snapshot with t4 profile:
   1: |
@@ -3241,13 +3309,9 @@ should match snapshot with t4 profile:
           # ---------------------------------------------------------------------------
           compute_mode: "default"
 
-          # ---------------------------------------------------------------------------
-          # MIG configuration (T4 does not support MIG)
-          # ---------------------------------------------------------------------------
-          mig:
-            mode_current: "disabled"
-            mode_pending: "disabled"
-            max_gpu_instances: 0
+          # No mig section: the T4 is not a MIG-capable board, and the mock derives
+          # that from the board name, so NVML answers NVML_ERROR_NOT_SUPPORTED without
+          # the profile having to declare a disabled mode it can never leave.
 
           # ---------------------------------------------------------------------------
           # GPU operation mode (GOM)
@@ -3351,6 +3415,6 @@ should match snapshot with t4 profile:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nvml-mock
-        app.kubernetes.io/version: 550.163.01
-        helm.sh/chart: nvml-mock-0.3.0
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: nvml-mock-0.0.0-dev
       name: RELEASE-NAME-nvml-mock-config

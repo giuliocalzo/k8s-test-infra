@@ -3,6 +3,11 @@
 suite: DaemonSet
 templates:
   - templates/daemonset.yaml
+# Render against a fixed chart version so releasing a new chart never
+# rewrites expectations or snapshots here.
+chart:
+  version: 0.0.0-dev
+  appVersion: 0.0.0-dev
 tests:
   # ── Snapshots ───────────────────────────────────────────────────────
   - it: should match snapshot with default values
@@ -59,17 +64,11 @@ tests:
   - it: should include standard labels
     asserts:
       - equal:
-          path: metadata.labels["helm.sh/chart"]
-          value: nvml-mock-0.3.0
-      - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: nvml-mock
       - equal:
           path: metadata.labels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
-      - equal:
-          path: metadata.labels["app.kubernetes.io/version"]
-          value: "550.163.01"
       - equal:
           path: metadata.labels["app.kubernetes.io/managed-by"]
           value: Helm
@@ -588,7 +587,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: LD_PRELOAD
-            value: /usr/local/lib/libibmockumad.so.1:/usr/local/lib/libibmockverbs.so.1:/usr/local/lib/libibmocksys.so.1:/usr/local/lib/libpcisysfs.so.1
+            value: /usr/local/lib/libibmockumad.so.1:/usr/local/lib/libibmockverbs.so.1:/usr/local/lib/libibmocksys.so.1:/usr/local/lib/libmockfs.so.1
       - contains:
           path: spec.template.spec.containers[0].env
           content:
