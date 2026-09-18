@@ -33,6 +33,8 @@ import (
 	"strings"
 
 	"sigs.k8s.io/yaml"
+
+	"github.com/NVIDIA/k8s-test-infra/internal/gpuarch"
 )
 
 // KnownProfiles is the full set of chart profiles shipped in the repo. The
@@ -84,6 +86,9 @@ type rawProfile struct {
 				Max int `json:"max"`
 			} `json:"availability_histogram"`
 		} `json:"remapped_rows"`
+		MIG *struct {
+			MaxGPUInstances int `json:"max_gpu_instances"`
+		} `json:"mig"`
 	} `json:"device_defaults"`
 	Devices []struct {
 		Index    int          `json:"index"`
@@ -152,7 +157,7 @@ type Profile struct {
 	pciRoots    int
 	memoryBytes int64
 
-	architecture       string
+	arch               gpuarch.Arch
 	shutdownThresholdC int
 	slowdownThresholdC int
 	maxOperatingC      int
@@ -170,6 +175,8 @@ type Profile struct {
 	workloadProfiles          []WorkloadPowerProfile
 	workloadProfilesRequested []int
 	workloadProfilesDeclared  bool
+
+	migMaxInstances int
 }
 
 // WorkloadPowerProfile is one profile a board advertises through
@@ -197,6 +204,11 @@ func (p Profile) GFDProductName() string {
 func (p Profile) MemoryMiB() int { return int(p.memoryBytes / bytesPerMiB) }
 
 // Load reads profilesDir/<name>.yaml and returns the typed Profile.
+//
+// device_defaults.architecture is required and must name a generation
+// gpuarch.Parse recognizes: the harness keys its "this generation and newer"
+// expectations off it, so an absent or misspelled value would leave them
+// answering from a default with the suite green.
 func Load(profilesDir, name string) (Profile, error) {
 	path := filepath.Join(profilesDir, name+".yaml")
 	data, err := os.ReadFile(path)
@@ -213,18 +225,26 @@ func Load(profilesDir, name string) (Profile, error) {
 	if len(raw.Devices) == 0 {
 		return Profile{}, fmt.Errorf("profile %q: devices list is empty", path)
 	}
+	if strings.TrimSpace(raw.DeviceDefaults.Architecture) == "" {
+		return Profile{}, fmt.Errorf("profile %q: device_defaults.architecture is empty", path)
+	}
+	parsedArch, ok := gpuarch.Parse(raw.DeviceDefaults.Architecture)
+	if !ok {
+		return Profile{}, fmt.Errorf("profile %q: unrecognized device_defaults.architecture %q",
+			path, raw.DeviceDefaults.Architecture)
+	}
 
 	p := Profile{
-		Name:         name,
-		DisplayName:  raw.DeviceDefaults.Name,
-		gpuCount:     len(raw.Devices),
-		ibEnabled:    raw.Infiniband.Enabled,
-		hcasPerGPU:   raw.Infiniband.HCAsPerGPU,
-		linksPerGPU:  raw.NVLink.LinksPerGPU,
-		hasSwitches:  len(raw.NVLink.Switches) > 0,
-		c2cEnabled:   raw.NVLink.C2CEnabled,
-		memoryBytes:  raw.DeviceDefaults.Memory.TotalBytes,
-		architecture: strings.ToLower(strings.TrimSpace(raw.DeviceDefaults.Architecture)),
+		Name:        name,
+		DisplayName: raw.DeviceDefaults.Name,
+		gpuCount:    len(raw.Devices),
+		ibEnabled:   raw.Infiniband.Enabled,
+		hcasPerGPU:  raw.Infiniband.HCAsPerGPU,
+		linksPerGPU: raw.NVLink.LinksPerGPU,
+		hasSwitches: len(raw.NVLink.Switches) > 0,
+		c2cEnabled:  raw.NVLink.C2CEnabled,
+		memoryBytes: raw.DeviceDefaults.Memory.TotalBytes,
+		arch:        parsedArch,
 
 		driverVersion: strings.TrimSpace(raw.System.DriverVersion),
 	}
@@ -271,6 +291,9 @@ func (p *Profile) applyOptionalDeviceDefaults(raw rawProfile) {
 	if f := raw.DeviceDefaults.Fabric; f != nil {
 		p.hasFabric = true
 		p.fabricAuto = strings.EqualFold(strings.TrimSpace(f.State), "auto")
+	}
+	if mig := raw.DeviceDefaults.MIG; mig != nil {
+		p.migMaxInstances = mig.MaxGPUInstances
 	}
 	if pl := raw.DeviceDefaults.Platform; pl != nil {
 		p.hasPlatform = true
@@ -324,6 +347,12 @@ func (p Profile) ExpectedGPUs() int { return p.gpuCount }
 
 // IBEnabled reports whether the profile ships InfiniBand enabled.
 func (p Profile) IBEnabled() bool { return p.ibEnabled }
+
+// MIGCapable reports whether the board can partition at all. That is a
+// property of the hardware, so it reads max_gpu_instances: no profile declares
+// a layout, since how a board is carved is a deployment choice supplied at
+// install through gpu.mig.gpuInstances.
+func (p Profile) MIGCapable() bool { return p.migMaxInstances > 0 }
 
 // ExpectedHCAs is the number of InfiniBand HCAs the profile should expose:
 // one per GPU when IB is enabled, otherwise 0 (l40s/t4 negative control).
@@ -382,8 +411,11 @@ func (p Profile) C2CEnabled() bool { return p.c2cEnabled }
 // being satisfiable by constants.
 func (p Profile) PlatformIdentity() (PlatformIdentity, bool) { return p.platform, p.hasPlatform }
 
-// Architecture is device_defaults.architecture (lowercased), e.g. "ampere".
-func (p Profile) Architecture() string { return p.architecture }
+// Architecture is the profile's generation as an ordered value, for
+// expectations of the form "this generation and newer". It formats itself as
+// the canonical lowercase name, so the l40s profile's "ada_lovelace" spelling
+// prints as "ada".
+func (p Profile) Architecture() gpuarch.Arch { return p.arch }
 
 // ShutdownThresholdC is thermal.shutdown_threshold_c from the profile.
 func (p Profile) ShutdownThresholdC() int { return p.shutdownThresholdC }
@@ -518,12 +550,6 @@ func (p Profile) DriverMajor() int {
 	return n
 }
 
-// preAmpereArchitectures are the device_defaults.architecture values whose
-// hardware predates both row remapping and the split SRAM ECC counters.
-var preAmpereArchitectures = map[string]bool{
-	"kepler": true, "maxwell": true, "pascal": true, "volta": true, "turing": true,
-}
-
 // ReportsDetailedSramECC is true when nvidia-smi renders the Ampere-and-later
 // SRAM breakdown for this architecture: the uncorrectable count split into
 // parity and SEC-DED, plus the per-unit source list and the threshold flag.
@@ -531,7 +557,7 @@ var preAmpereArchitectures = map[string]bool{
 // the rest, so the expectation is an architecture axis rather than a config one
 // — nvidia-smi picks the layout from the reported architecture, not from what
 // the profile configures (#641).
-func (p Profile) ReportsDetailedSramECC() bool { return !preAmpereArchitectures[p.architecture] }
+func (p Profile) ReportsDetailedSramECC() bool { return p.arch.AtLeast(gpuarch.Ampere) }
 
 // ReportsRowRemapHistogram reports whether the profile configures
 // remapped_rows.availability_histogram, i.e. whether nvidia-smi must render bank
@@ -548,11 +574,4 @@ func (p Profile) RowRemapHistogramBanks() int { return p.rowRemapBanks }
 // ReportsTLimitTemp is true when real hardware of this architecture reports the
 // GPU T.Limit temperature field IDs (Ada and later). Pre-Ada profiles keep the
 // legacy absolute threshold rows via nvmlDeviceGetTemperatureThreshold.
-func (p Profile) ReportsTLimitTemp() bool {
-	switch p.architecture {
-	case "ada", "ada_lovelace", "hopper", "blackwell", "rubin":
-		return true
-	default:
-		return false
-	}
-}
+func (p Profile) ReportsTLimitTemp() bool { return p.arch.AtLeast(gpuarch.Ada) }

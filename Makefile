@@ -192,6 +192,23 @@ test-nvidia-imex-shim: build ## Run nvidia-imex-shim integration tests
 verify-greptile: ## Validate the .greptile review configuration
 	@bash hack/verify-greptile-config.sh
 
+.PHONY: actionlint
+actionlint: ## Validate GitHub Actions workflows
+	@./hack/actionlint.sh
+
+REPOSITORY_AUTOMATION_DIR := .github/actions/repo-automation
+
+.PHONY: repository-automation-ci
+repository-automation-ci: ## Validate and package the repository automation action
+	cd $(REPOSITORY_AUTOMATION_DIR) && npm ci
+	cd $(REPOSITORY_AUTOMATION_DIR) && npm test
+	cd $(REPOSITORY_AUTOMATION_DIR) && npm run lint
+	cd $(REPOSITORY_AUTOMATION_DIR) && npm audit --audit-level=high
+	go test ./tests/hack -run TestMokkaCherryPick -count=1
+	make actionlint
+	cd $(REPOSITORY_AUTOMATION_DIR) && npm run package
+	cd $(REPOSITORY_AUTOMATION_DIR) && git diff --exit-code -- dist
+
 .PHONY: helm-tests
 helm-tests: ## Run the nvml-mock chart unit test suite
 	helm unittest $(HELM_CHART_DIR)
@@ -299,6 +316,7 @@ image-load:
 #   make e2e-multi-node            # heterogeneous A100/T4 multi-node scenario
 #   make e2e-nri                   # node-wide NRI ambient-injection scenario
 #   make e2e-nfd                   # NFD label-provenance scenario
+#   make e2e-mig                   # MIG scenario, device plugin in migStrategy=single
 # CI builds the image once per run. Every leg loads it into Kind and sets
 # E2E_IMAGE to that ref. The reshaping scenarios set the DaemonSet to this ref.
 #
@@ -311,10 +329,10 @@ image-load:
 # ---------------------------------------------------------------------------
 GINKGO ?= $(GO_CMD) run github.com/onsi/ginkgo/v2/ginkgo
 E2E_TIMEOUT ?= 90m
-E2E_DEFAULT_LABEL_FILTER ?= !validator && !dra && !gpu-operator && !multi-node && !nri && !nfd
+E2E_DEFAULT_LABEL_FILTER ?= !validator && !dra && !gpu-operator && !multi-node && !nri && !nfd && !mig
 E2E_GINKGO_FLAGS ?= --label-filter='$(E2E_DEFAULT_LABEL_FILTER)'
 
-.PHONY: e2e e2e-dra e2e-gpu-operator e2e-multi-node e2e-nri e2e-nfd
+.PHONY: e2e e2e-dra e2e-gpu-operator e2e-multi-node e2e-nri e2e-nfd e2e-mig
 
 # `set -o pipefail` is inline on purpose; do not drop it as redundant with
 # .SHELLFLAGS. GNU Make ignores .SHELLFLAGS before 3.82 and macOS ships 3.81,
@@ -343,6 +361,15 @@ e2e-nri: ## e2e — NRI ambient-injection scenario
 e2e-nfd: ## e2e — NFD label-provenance scenario (pinned to a100)
 	$(MAKE) e2e E2E_PROFILES=a100 E2E_GINKGO_FLAGS='--label-filter=nfd'
 
+# E2E_PROFILES is the caller's, as for the sibling scenario targets. Pinning it
+# here would be a command-line assignment to the sub-make, which outranks the
+# environment: every CI matrix leg would run the pinned set rather than its own
+# profile. Pick profiles that declare a partitioning — the scenario skips the
+# boards that cannot partition, and the chart refuses a capable board with no
+# layout from either the profile or gpu.mig.gpuInstances.
+e2e-mig: ## e2e — MIG scenario with the device plugin in migStrategy=single
+	$(MAKE) e2e E2E_GINKGO_FLAGS='--label-filter=mig'
+
 ##@ Documentation
 
 # The docs site is MkDocs Material. CI calls these same targets so a failure
@@ -364,7 +391,7 @@ DOCS_PYTHON_VERSION ?= 3.12
 # works for someone who has mkdocs on PATH by other means.
 DOCS_PATH := PATH="$(DOCS_VENV)/bin:$$PATH"
 
-.PHONY: docs-deps docs-build docs-serve docs-check-exclusion docs
+.PHONY: docs-deps docs-build docs-serve docs-check-exclusion docs managed-eks-terraform-check
 
 # Missing uv is a hard failure, not a pip fallback. A fallback would let CI and
 # a developer resolve different interpreters while both report success, which is
@@ -408,3 +435,12 @@ docs-check-exclusion: ## Verify gitignored internal plans cannot reach the site
 	echo "exclude_docs verified: internal plans are not published"
 
 docs: docs-check-exclusion docs-build ## Verify exclusion then build the site
+
+MANAGED_EKS_TERRAFORM_DIR := docs/guides/install/aws/eks/terraform
+TERRAFORM                 ?= terraform
+
+managed-eks-terraform-check: ## Format and validate the managed EKS Terraform without AWS credentials
+	$(TERRAFORM) -chdir=$(MANAGED_EKS_TERRAFORM_DIR) fmt -check -recursive
+	TF_IN_AUTOMATION=1 $(TERRAFORM) -chdir=$(MANAGED_EKS_TERRAFORM_DIR) init \
+		-backend=false -input=false -lockfile=readonly
+	TF_IN_AUTOMATION=1 $(TERRAFORM) -chdir=$(MANAGED_EKS_TERRAFORM_DIR) validate
