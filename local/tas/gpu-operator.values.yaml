@@ -1,0 +1,16 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+#
+# gpu-operator chart overlay for the --tas scenario, layered after
+# local/gpu-operator/gpu-operator.values.yaml.
+#
+# GFD rewrites nvidia.com/gpu.clique from the fabric the mock reports, over
+# the static label in local/kind/tas.kind.yaml. Through the CDI spec alone
+# the mock does not know the cluster topology, so every node would report the
+# profile's one default clique and topograph would see a single domain. The
+# nvml-mock NRI plugin hands the topology to pods that opt in with this
+# annotation; the ClusterPolicy can only annotate every operand, not GFD
+# alone.
+daemonsets:
+  annotations:
+    nvml-mock.nvidia.com/devices: "true"
