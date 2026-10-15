@@ -4,9 +4,11 @@
 # Loadable Tiltfile: Slinky (Slurm on Kubernetes) consumer.
 #
 # Exports:
-#   install(nvml_mock_releases) — install cert-manager, the Slinky
-#     slurm-operator and a Slurm cluster whose GPU NodeSet runs one slurmd per
-#     mock-GPU worker.
+#   install(nvml_mock_releases, extra_values=[]) — install cert-manager, the
+#     Slinky slurm-operator and a Slurm cluster whose GPU NodeSet runs one
+#     slurmd per mock-GPU worker. extra_values is a list of --values paths
+#     layered on top of slurm.values.yaml (later paths win); --tas uses it to
+#     turn on topology/block.
 #   UPSERT_TIMEOUT_S — the Tilt apply timeout install() needs. The root
 #     Tiltfile applies the largest among active consumers.
 #
@@ -34,7 +36,7 @@ _NAMESPACE = 'slurm'
 _NODESET = 'slurm-worker-gpu'
 
 
-def install(nvml_mock_releases):
+def install(nvml_mock_releases, extra_values=[]):
     """Install cert-manager, the slurm-operator and a GPU Slurm cluster."""
     wait = ['--wait', '--timeout', '%ds' % _HELM_TIMEOUT_S]
 
@@ -81,12 +83,15 @@ def install(nvml_mock_releases):
         labels=['slinky'],
     )
 
+    slurm_values = ['--values', 'local/slinky/slurm.values.yaml']
+    for v in extra_values:
+        slurm_values += ['--values', v]
+
     helm_resource(
         'slurm',
         _SLINKY_CHARTS + '/slurm',
         namespace=_NAMESPACE,
-        flags=['--create-namespace', '--version', _SLINKY_VERSION,
-               '--values', 'local/slinky/slurm.values.yaml'],
+        flags=['--create-namespace', '--version', _SLINKY_VERSION] + slurm_values,
         resource_deps=['slurm-operator', 'gpu-operator-ready'] + nvml_mock_releases,
         labels=['slinky'],
     )

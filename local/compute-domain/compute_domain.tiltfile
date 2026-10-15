@@ -18,8 +18,12 @@
 #
 # Exports:
 #   build_images(with_dra) — build 2 images (or 3 if with_dra).
-#   install(active_consumers) — install one nvml-mock helm release
-#     with the topology overlay + scenario triggers. Returns ['nvml-mock'].
+#   install(active_consumers, control_plane=False, topology_values=None)
+#     — install one nvml-mock helm release with the topology overlay +
+#     scenario triggers. Returns ['nvml-mock']. topology_values replaces
+#     local/compute-domain/topology.yaml (used by --tas, whose cluster
+#     groups the workers differently) and drops the triggers, which assert
+#     this file's layout.
 #
 # All side effects inside functions so load()ing this file is a pure import.
 
@@ -36,6 +40,7 @@ DAEMON_IMAGE        = 'nvml-mock:compute-domain-daemon'
 _CHART              = 'deployments/nvml-mock/helm/nvml-mock'
 _MOCK_DOCKERFILE    = 'deployments/nvml-mock/Dockerfile'
 _OVERLAY_DOCKERFILE = 'deployments/nvml-mock/Dockerfile.compute-domain-daemon'
+_TOPOLOGY_VALUES    = 'local/compute-domain/topology.yaml'
 
 
 def build_images(with_dra):
@@ -107,7 +112,7 @@ def build_images(with_dra):
         )
 
 
-def install(active_consumers, control_plane=False):
+def install(active_consumers, control_plane=False, topology_values=None):
     """Install the nvml-mock helm release with the compute-domain topology.
 
     Returns ['nvml-mock'] so downstream consumers (dra, gpu-operator)
@@ -118,7 +123,7 @@ def install(active_consumers, control_plane=False):
     rolls the Deployment alongside the compute-domain scenario.
     """
     flags = [
-        '--values', 'local/compute-domain/topology.yaml',
+        '--values', topology_values or _TOPOLOGY_VALUES,
         '--values', 'local/compute-domain/nvml-mock.values.yaml',
     ]
 
@@ -153,26 +158,29 @@ def install(active_consumers, control_plane=False):
             labels=['mokka-core'],
         )
 
-    # Scenario 1: per-node fabric identity via check-fabric. Manually
-    # triggered — hitting the button asserts the topology overlay
-    # rendered the expected cliqueId / clusterUuid / state on each node.
-    local_resource(
-        'check-fabric',
-        cmd='bash local/compute-domain/scenarios/check-fabric.sh',
-        resource_deps=['nvml-mock'],
-        auto_init=False,
-        labels=['compute-domain-tests'],
-    )
+    # Both triggers assert local/compute-domain/topology.yaml worker by
+    # worker, so a caller with its own topology gets neither.
+    if topology_values == None:
+        # Scenario 1: per-node fabric identity via check-fabric. Manually
+        # triggered — hitting the button asserts the topology overlay
+        # rendered the expected cliqueId / clusterUuid / state on each node.
+        local_resource(
+            'check-fabric',
+            cmd='bash local/compute-domain/scenarios/check-fabric.sh',
+            resource_deps=['nvml-mock'],
+            auto_init=False,
+            labels=['compute-domain-tests'],
+        )
 
-    # Scenario 3: helm upgrade --reuse-values -f rebind.topology.yaml,
-    # evict DaemonSet pods so mock NVML re-reads MOCK_TOPOLOGY_CONFIG,
-    # re-assert new clique/UUID on every worker.
-    local_resource(
-        'topology-rebind',
-        cmd='bash local/compute-domain/scenarios/topology-rebind.sh',
-        resource_deps=['nvml-mock'],
-        auto_init=False,
-        labels=['compute-domain-tests'],
-    )
+        # Scenario 3: helm upgrade --reuse-values -f rebind.topology.yaml,
+        # evict DaemonSet pods so mock NVML re-reads MOCK_TOPOLOGY_CONFIG,
+        # re-assert new clique/UUID on every worker.
+        local_resource(
+            'topology-rebind',
+            cmd='bash local/compute-domain/scenarios/topology-rebind.sh',
+            resource_deps=['nvml-mock'],
+            auto_init=False,
+            labels=['compute-domain-tests'],
+        )
 
     return ['nvml-mock']
