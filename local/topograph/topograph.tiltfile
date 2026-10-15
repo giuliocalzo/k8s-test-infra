@@ -19,7 +19,12 @@ def install(nvml_mock_releases, extra_values=[], extra_resource_deps=[]):
         'topograph',
         'topograph-repo/topograph',
         namespace='topograph',
-        flags=['--create-namespace', '--version', _CHART_VERSION] + values_flags + ['--timeout', '300s'],
+        flags=[
+            '--create-namespace',
+            '--version', _CHART_VERSION,
+        ] + values_flags + [
+            '--timeout', '300s',
+        ],
         # UI ordering only: topograph reads static node labels from the Kubernetes
         # API, not the mock.
         resource_deps=[_REPO_RESOURCE] + nvml_mock_releases + extra_resource_deps,

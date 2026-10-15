@@ -107,7 +107,7 @@ def install(active_consumers, control_plane=False, topology_values=None):
 
     # Both triggers assert local/compute-domain/topology.yaml worker by
     # worker, so a caller with its own topology gets neither.
-    if topology_values == None:
+    if not topology_values:
         local_resource(
             'check-fabric',
             cmd='bash local/compute-domain/scenarios/check-fabric.sh',
