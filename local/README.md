@@ -8,7 +8,7 @@ what is specific to this directory.
 
 ## Cluster
 
-Both cluster shapes use the stock node image the Makefile pins (`KIND_NODE_IMAGE`):
+Every cluster shape uses the stock node image the Makefile pins (`KIND_NODE_IMAGE`):
 the Mokka node daemon installs the NVIDIA container runtime and registers the
 `nvidia` handler with containerd itself (see
 [Container runtime setup](../docs/components/node-daemon.md#container-runtime-setup)).
@@ -71,3 +71,32 @@ kubectl -n slurm exec slurm-controller-0 -c slurmctld -- srun -N1 --gres=gpu:2 n
 
 The [Slinky guide](../docs/guides/slinky/README.md) walks through the same setup from
 published artifacts.
+
+### Topology-aware scheduling (`--tas`)
+
+The `tas` cluster's four workers form two NVLink cliques of two,
+`worker-0`/`worker-1` and `worker-2`/`worker-3`; the clique labels in
+`kind/tas.kind.yaml` and the fabric the mock reports (`tas/topology.yaml`) agree.
+topograph's `dra` provider makes one block per clique and its `slinky` engine
+hands it to Slurm in two parts: the block names in `topology.conf` (ConfigMap
+`slurm-config-extra`, applied in place by the controller's reconfigure sidecar),
+and each node's block as the `topology.slinky.slurm.net/spec` Node annotation,
+which the slurm-operator copies onto the Slurm node within seconds. `slurmd` pods
+are dynamic nodes that `slurmctld` does not know when it reads `topology.conf`, so
+the file cannot list them.
+
+```bash
+kubectl -n slurm exec slurm-controller-0 -c slurmctld -- scontrol show topology
+```
+
+GPU Feature Discovery rewrites `nvidia.com/gpu.clique` from the fabric the mock
+reports, so `--tas` opts the GPU Operator's operand pods into the nvml-mock NRI
+plugin (`tas/gpu-operator.values.yaml`); without it, GFD relabels every worker with
+the profile's single default clique.
+
+Helm and topograph share `topology.conf`, so every `helm upgrade` of the `slurm`
+release, a later `tilt up -- --tas` included, resets it to the seed in
+`tas/slurm.values.yaml` until topograph rewrites it. Scheduling carries on because
+the seed names topograph's blocks (`block001`, `block002`). If you change the
+cliques, update the seed to match; `tas-topology` fails while the block names in
+`topology.conf` and in `slurmctld` differ.

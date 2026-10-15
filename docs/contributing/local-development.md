@@ -16,16 +16,18 @@ tilt up -- --gpu-operator    # the dev loop
 
 ## Step 1 — create a cluster
 
-Two cluster shapes exist, selected with `PROFILE`:
+Three cluster shapes exist, selected with `PROFILE`:
 
-| `PROFILE`        | Shape                                           | Cluster name           | Use with                          |
-|------------------|-------------------------------------------------|------------------------|-----------------------------------|
-| `default`        | 1 control-plane + 2 workers                     | `mokka`                | everything except compute-domain  |
-| `compute-domain` | 1 control-plane + 4 workers with NVLink cliques | `mokka-compute-domain` | `--compute-domain`, `--topograph` |
+| `PROFILE`        | Shape                                                    | Cluster name           | Use with                                 |
+|------------------|----------------------------------------------------------|------------------------|------------------------------------------|
+| `default`        | 1 control-plane + 2 workers                              | `mokka`                | everything except compute-domain and tas |
+| `compute-domain` | 1 control-plane + 4 workers, one NVLink clique each      | `mokka-compute-domain` | `--compute-domain`, `--topograph`        |
+| `tas`            | 1 control-plane + 4 workers in two NVLink cliques of two | `mokka-tas`            | `--tas`                                  |
 
 ```bash
 make cluster-create                         # default
 make cluster-create PROFILE=compute-domain
+make cluster-create PROFILE=tas
 
 make cluster-delete                         # PROFILE must match creation
 ```
@@ -68,6 +70,7 @@ Everything else is a flag.
 | `--observability` | kube-prometheus-stack and a Grafana dashboard for the mock fleet |
 | `--dynamo` | The NVIDIA Dynamo operator and a `qwen3` inference graph whose mocker worker runs on a mock GPU |
 | `--slinky` | cert-manager, the Slinky slurm-operator and a Slurm cluster with one GPU `slurmd` per mock-GPU worker |
+| `--tas` | topograph feeding the NVLink cliques to Slurm as block topology, so a multi-node job runs inside one clique or waits. Needs the `tas` cluster |
 | `--control-plane` | The Mokka control-plane image and the `mokka-crds` chart |
 
 ### What composes and what does not
@@ -82,10 +85,11 @@ Most flags stack. These do not:
 | `--compute-domain` with `--nvmlmock-image` | The scenario builds its own layered images |
 | `--slinky` with `--dynamo` | `slurmd` claims every mock GPU, so the Dynamo worker could never schedule |
 
-Four flags imply others: `--topograph` implies `--compute-domain`, because
+Five flags imply others: `--topograph` implies `--compute-domain`, because
 cliques only exist there; `--observability` implies `--gpu-operator`, because
 `dcgm-exporter` is one of its operands; `--dynamo` and `--slinky` imply
-`--gpu-operator`, because their workloads request `nvidia.com/gpu`.
+`--gpu-operator`, because their workloads request `nvidia.com/gpu`; `--tas`
+implies `--topograph` and `--slinky`, the two parts it connects.
 
 ```bash
 tilt up -- --gpu-profile gb200
@@ -97,6 +101,9 @@ tilt up -- --slinky
 
 make cluster-create PROFILE=compute-domain
 tilt up -- --compute-domain --dra
+
+make cluster-create PROFILE=tas
+tilt up -- --tas
 ```
 
 ## Manual triggers in the Tilt UI
@@ -130,6 +137,14 @@ GPUs it was configured with, that a 2-GPU job is given exactly 2 and they are
 the node's profile, and that a job using every GPU on every node runs. The
 [Slinky guide](../guides/slinky/README.md) walks through the same setup from
 published artifacts.
+
+**`tas-tests`** — `tas-gang` reads the blocks from Slurm and asserts three
+placements: two 2-node jobs run at once on one whole block each; with one node
+of a block busy, a 2-node job takes the other block rather than pairing nodes
+across blocks; with one node busy in each block, a 2-node job waits with reason
+`No suitable topology unit found`, although two nodes are idle. How topograph
+hands the cliques to Slurm is in
+[local/README.md](../../local/README.md#topology-aware-scheduling---tas).
 
 ## Overriding Helm values
 
