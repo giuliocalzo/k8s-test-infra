@@ -587,9 +587,8 @@ KIND_NODE_IMAGE   ?= kind-node-nv:latest
 # Consumer selection (--gpu-operator / --dra / --fgo / --multi-gpu-profile)
 # happens in the Tiltfile — the default cluster shape supports every consumer
 # scenario without a rebuild.
-# Every profile but default names its cluster mokka-<profile>, because its
-# topology overlay hardcodes the worker names — see
-# local/compute-domain/topology.yaml and local/tas/topology.yaml.
+# Every profile but default names its cluster mokka-<profile>, so profiles can
+# run side by side and Tilt can pick the matching kind-<name> context.
 # Note: distinct from Tilt's --gpu-profile (a100|gb200|...) — this PROFILE
 # picks the Kind cluster topology; --gpu-profile picks the simulated GPU.
 PROFILE ?= default
