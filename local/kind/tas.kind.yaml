@@ -1,0 +1,73 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+#
+# Kind cluster config for the --tas (topology-aware scheduling) Tilt scenario.
+#
+# Four workers in two NVLink cliques of two, so a topology-aware scheduler has
+# two domains to keep a two-node job inside. compute-domain.kind.yaml gives
+# every worker its own clique, which leaves topograph four one-node blocks.
+#
+# The clique labels are static because no component in this cluster writes
+# them; on GB200 the GPU Operator's GPU Feature Discovery does. They must
+# match local/tas/topology.yaml, the fabric the mock driver reports, and both
+# hardcode the worker names below.
+#
+# The DRA feature gate and runtime-config match compute-domain.kind.yaml, so
+# --tas composes with --dra the same way --compute-domain does.
+#
+# Usage:
+#   make cluster-create PROFILE=tas
+#   tilt up -- --tas
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: mokka-tas
+featureGates:
+  DynamicResourceAllocation: true
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: ClusterConfiguration
+        apiServer:
+          extraArgs:
+            runtime-config: "resource.k8s.io/v1beta1=true"
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          name: control-0
+  - role: worker
+    labels:
+      nvidia.com/gpu.clique: "00000000-0000-0000-0000-0000000000ab.0"
+      mokka.nvidia.com/type: sgpu
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          name: worker-0
+  - role: worker
+    labels:
+      nvidia.com/gpu.clique: "00000000-0000-0000-0000-0000000000ab.0"
+      mokka.nvidia.com/type: sgpu
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          name: worker-1
+  - role: worker
+    labels:
+      nvidia.com/gpu.clique: "00000000-0000-0000-0000-0000000000cd.0"
+      mokka.nvidia.com/type: sgpu
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          name: worker-2
+  - role: worker
+    labels:
+      nvidia.com/gpu.clique: "00000000-0000-0000-0000-0000000000cd.0"
+      mokka.nvidia.com/type: sgpu
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          name: worker-3
