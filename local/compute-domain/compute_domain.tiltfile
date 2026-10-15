@@ -15,6 +15,7 @@ DAEMON_IMAGE        = 'nvml-mock:compute-domain-daemon'
 _CHART              = 'deployments/nvml-mock/helm/nvml-mock'
 _MOCK_DOCKERFILE    = 'deployments/nvml-mock/Dockerfile'
 _OVERLAY_DOCKERFILE = 'deployments/nvml-mock/Dockerfile.compute-domain-daemon'
+_TOPOLOGY_VALUES    = 'local/compute-domain/topology.yaml'
 
 
 def build_images(with_dra):
@@ -68,9 +69,9 @@ def build_images(with_dra):
         )
 
 
-def install(active_consumers, control_plane=False):
+def install(active_consumers, control_plane=False, topology_values=None):
     flags = [
-        '--values', 'local/compute-domain/topology.yaml',
+        '--values', topology_values or _TOPOLOGY_VALUES,
         '--values', 'local/compute-domain/nvml-mock.values.yaml',
     ]
 
@@ -104,20 +105,23 @@ def install(active_consumers, control_plane=False):
             labels=['mokka-core'],
         )
 
-    local_resource(
-        'check-fabric',
-        cmd='bash local/compute-domain/scenarios/check-fabric.sh',
-        resource_deps=['nvml-mock'],
-        auto_init=False,
-        labels=['compute-domain-tests'],
-    )
+    # Both triggers assert local/compute-domain/topology.yaml worker by
+    # worker, so a caller with its own topology gets neither.
+    if topology_values == None:
+        local_resource(
+            'check-fabric',
+            cmd='bash local/compute-domain/scenarios/check-fabric.sh',
+            resource_deps=['nvml-mock'],
+            auto_init=False,
+            labels=['compute-domain-tests'],
+        )
 
-    local_resource(
-        'topology-rebind',
-        cmd='bash local/compute-domain/scenarios/topology-rebind.sh',
-        resource_deps=['nvml-mock'],
-        auto_init=False,
-        labels=['compute-domain-tests'],
-    )
+        local_resource(
+            'topology-rebind',
+            cmd='bash local/compute-domain/scenarios/topology-rebind.sh',
+            resource_deps=['nvml-mock'],
+            auto_init=False,
+            labels=['compute-domain-tests'],
+        )
 
     return ['nvml-mock']

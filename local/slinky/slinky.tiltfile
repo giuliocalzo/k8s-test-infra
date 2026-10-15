@@ -15,7 +15,7 @@ _NAMESPACE = 'slurm'
 _NODESET = 'slurm-worker-gpu'
 
 
-def install(nvml_mock_releases):
+def install(nvml_mock_releases, extra_values=[]):
     wait = ['--wait', '--timeout', '%ds' % _HELM_TIMEOUT_S]
 
     # The operator's admission webhooks are served with cert-manager-issued
@@ -61,12 +61,15 @@ def install(nvml_mock_releases):
         labels=['slinky'],
     )
 
+    slurm_values = ['--values', 'local/slinky/slurm.values.yaml']
+    for v in extra_values:
+        slurm_values += ['--values', v]
+
     helm_resource(
         'slurm',
         _SLINKY_CHARTS + '/slurm',
         namespace=_NAMESPACE,
-        flags=['--create-namespace', '--version', _SLINKY_VERSION,
-               '--values', 'local/slinky/slurm.values.yaml'],
+        flags=['--create-namespace', '--version', _SLINKY_VERSION] + slurm_values,
         resource_deps=['slurm-operator', 'gpu-operator-ready'] + nvml_mock_releases,
         labels=['slinky'],
     )
