@@ -124,10 +124,11 @@ if with_tas:
     with_slinky = True
 
 # --topograph implies --compute-domain: cliques only exist in the
-# compute-domain cluster (local/kind/compute-domain.kind.yaml carries
+# compute-domain and tas clusters (their Kind configs carry
 # nvidia.com/gpu.clique labels as static node labels; topograph reads
-# them without requiring the DRA driver). The compute-domain Kind
-# cluster is still required (make cluster-create PROFILE=compute-domain).
+# them without requiring the DRA driver). One of those clusters is still
+# required (make cluster-create PROFILE=compute-domain, or PROFILE=tas
+# under --tas).
 if with_topograph:
     with_compute_domain = True
 
@@ -155,7 +156,8 @@ if with_slinky:
 # (gb200 for NVLink5 fabric APIs), so it cannot compose with --multi-gpu-profile
 # or with any --gpu-profile the user might pass. --gpu-operator is
 # allowed but experimental — the Operator's RuntimeClass path with the
-# compute-domain-imex layered image is untested.
+# compute-domain-imex layered image is untested outside --tas, which needs
+# local/tas/gpu-operator.values.yaml for GFD to report the right cliques.
 if with_compute_domain and multi_gpu_profile:
     fail('--compute-domain is mutually exclusive with --multi-gpu-profile ' +
          '(compute-domain uses its own 4-worker cluster shape)')

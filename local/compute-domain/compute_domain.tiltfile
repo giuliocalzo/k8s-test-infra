@@ -121,6 +121,9 @@ def install(active_consumers, control_plane=False, topology_values=None):
     control_plane=True flips controlPlane.enabled on the release and
     threads the CP image through image_deps so Tilt rebuilds → pins →
     rolls the Deployment alongside the compute-domain scenario.
+
+    topology_values replaces local/compute-domain/topology.yaml and drops
+    the check-fabric / topology-rebind triggers, which assert that file.
     """
     flags = [
         '--values', topology_values or _TOPOLOGY_VALUES,

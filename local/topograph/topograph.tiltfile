@@ -13,7 +13,7 @@
 #
 # Coupling (implicit in the root Tiltfile):
 #   --topograph implies --compute-domain (cliques only exist in that
-#   scenario). --dra is NOT implied: nvidia.com/gpu.clique is a static
+#   scenario's mock fabric, which --tas reuses with its own overlay). --dra is NOT implied: nvidia.com/gpu.clique is a static
 #   Kind node label in local/kind/compute-domain.kind.yaml, so topograph
 #   reads it directly from the Kubernetes API — no runtime label writer
 #   required.
@@ -30,7 +30,9 @@ _REPO_RESOURCE = 'topograph-repo'
 
 # Pinned rather than floating, like the other consumers: an upstream release
 # would otherwise change the values schema under this repo without a commit.
-# Bump deliberately.
+# Bump deliberately, and check that the block names topograph writes still
+# match the seed topology.conf in local/tas/slurm.values.yaml: a mismatch
+# makes every Slurm reconfigure under --tas fail.
 _CHART_VERSION = '1.0.0'
 
 def install(nvml_mock_releases, extra_values=[], extra_resource_deps=[]):
