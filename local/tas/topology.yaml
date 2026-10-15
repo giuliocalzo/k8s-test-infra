@@ -1,0 +1,28 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+#
+# nvml-mock fabric overlay for the --tas scenario, used in place of
+# local/compute-domain/topology.yaml. Keep it aligned with the
+# nvidia.com/gpu.clique labels in local/kind/tas.kind.yaml: the label is what
+# topograph reads, the overlay is what the mock driver reports, and the two
+# must name the same clique for every node.
+#
+#   domain ab, clique 0: worker-0, worker-1
+#   domain cd, clique 0: worker-2, worker-3
+topology:
+  enabled: true
+  domains:
+    - name: nvlink-ab
+      uuid: "00000000-0000-0000-0000-0000000000ab"
+      cliques:
+        - id: 0
+          nodes:
+            - worker-0
+            - worker-1
+    - name: nvlink-cd
+      uuid: "00000000-0000-0000-0000-0000000000cd"
+      cliques:
+        - id: 0
+          nodes:
+            - worker-2
+            - worker-3
