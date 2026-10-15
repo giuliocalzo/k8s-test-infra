@@ -136,7 +136,12 @@ sleep "${PENDING_S}"
 read -r state n <<<"$(job "${j}")"
 [[ "${state}" == PENDING && -z "${n}" ]] \
   || fail "with one node held per block the 2-node job is ${state} on '${n}', expected PENDING with no nodes"
+# Two idle nodes are enough for the job, so any other reason (a limit, a
+# drained node) means the topology constraint was never what held it.
+reason=$(slurm squeue -h -j "${j}" -o '%r')
+[[ "${reason}" == *[Tt]opology* ]] \
+  || fail "the 2-node job is PENDING for '${reason}', not for want of a whole block"
 printf 'OK: job %s still PENDING (%s) after %ss with %s and %s idle\n' \
-  "${j}" "$(slurm squeue -h -j "${j}" -o '%r')" "${PENDING_S}" "${a2}" "${b2}"
+  "${j}" "${reason}" "${PENDING_S}" "${a2}" "${b2}"
 
 printf '\n==> tas-gang passed: Slurm placed every 2-node job inside one block or held it.\n'
