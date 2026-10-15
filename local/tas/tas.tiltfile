@@ -1,0 +1,52 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+#
+# Loadable Tiltfile: topology-aware scheduling (TAS) scenario.
+#
+# topograph discovers the cluster's NVLink cliques and hands them to Slurm as
+# topology/block blocks, so a multi-node Slurm job runs whole inside one
+# clique or waits. Runs on the tas Kind cluster (make cluster-create
+# PROFILE=tas), whose four workers form two cliques of two.
+#
+# Exports:
+#   TOPOLOGY_VALUES — nvml-mock fabric overlay matching the tas cluster's
+#     clique labels, for compute_domain install(topology_values=...).
+#   GPU_OPERATOR_VALUES, TOPOGRAPH_VALUES, SLURM_VALUES — overlays for the
+#     gpu-operator, topograph and slinky consumers' extra_values.
+#   TOPOGRAPH_DEPS — resources topograph must wait for: it maps Kubernetes
+#     nodes to Slurm nodes through Ready slurmd pods.
+#   install() — the readiness check and the manual gang-scheduling trigger.
+#
+# All side effects inside functions so load()ing this file is a pure import.
+
+TOPOLOGY_VALUES = 'local/tas/topology.yaml'
+GPU_OPERATOR_VALUES = 'local/tas/gpu-operator.values.yaml'
+TOPOGRAPH_VALUES = 'local/tas/topograph.values.yaml'
+SLURM_VALUES = 'local/tas/slurm.values.yaml'
+TOPOGRAPH_DEPS = ['slurm-nodes']
+
+# _NAMESPACE in local/slinky/slinky.tiltfile.
+_NAMESPACE = 'slurm'
+
+
+def install():
+    """Wait for Slurm's blocks to match the cliques; add the gang trigger."""
+    # topograph goes green when its pods start, well before its two writes
+    # reach slurmctld. This stays pending until they have, which is also what
+    # makes `tilt ci` wait for them.
+    local_resource(
+        'tas-topology',
+        cmd='bash local/tas/scenarios/wait-topology.sh %s' % _NAMESPACE,
+        resource_deps=['topograph'],
+        labels=['tas'],
+    )
+
+    # Manual: it submits jobs, which a reload of the Tiltfile should not do.
+    local_resource(
+        'tas-gang',
+        cmd='bash local/tas/scenarios/gang.sh',
+        env={'NAMESPACE': _NAMESPACE},
+        resource_deps=['tas-topology'],
+        auto_init=False,
+        labels=['tas-tests'],
+    )

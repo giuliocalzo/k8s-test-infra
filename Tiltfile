@@ -37,6 +37,13 @@ load('./local/dynamo/dynamo.tiltfile',
 load('./local/slinky/slinky.tiltfile',
      slinky_install='install',
      slinky_upsert_timeout_s='UPSERT_TIMEOUT_S')
+load('./local/tas/tas.tiltfile',
+     tas_install='install',
+     tas_topology_values='TOPOLOGY_VALUES',
+     tas_gpu_operator_values='GPU_OPERATOR_VALUES',
+     tas_topograph_values='TOPOGRAPH_VALUES',
+     tas_slurm_values='SLURM_VALUES',
+     tas_topograph_deps='TOPOGRAPH_DEPS')
 
 config.define_string('gpu-profile', args=False,
     usage='GPU profile to simulate (used unless --multi-gpu-profile is set): a100 | h100 | b200 | gb200 | gb300 | l40s | t4. Defaults to the chart\'s gpu.profile.')
@@ -63,6 +70,8 @@ config.define_bool('dynamo', args=False,
     usage='Also deploy NVIDIA Dynamo (operator only) and an aggregated DynamoGraphDeployment whose worker runs the mocker engine on a mock GPU, plus a manual dynamo-smoke trigger. Implies --gpu-operator (the worker requests nvidia.com/gpu). OpenAI API on http://localhost:8000.')
 config.define_bool('slinky', args=False,
     usage='Also deploy Slinky (cert-manager, slurm-operator, a Slurm cluster) with one slurmd per mock-GPU worker. Implies --gpu-operator (slurmd requests nvidia.com/gpu). Fits any cluster shape; with --compute-domain it gives a 4-node GB200 Slurm cluster.')
+config.define_bool('tas', args=False,
+    usage='Topology-aware scheduling scenario: topograph turns the NVLink cliques into Slurm topology/block blocks, so a multi-node Slurm job runs whole inside one clique or waits; adds the tas-topology readiness check and a manual tas-gang trigger. Implies --topograph and --slinky. Requires the tas Kind cluster: make cluster-create PROFILE=tas.')
 config.define_bool('control-plane', args=False,
     usage='Also deploy the Mokka Control Plane (MEP-0001) alongside nvml-mock. Composes with --multi-gpu-profile (the first profile release owns the single control plane), --compute-domain and --nvmlmock-image.')
 # CI passes the image its build job produced instead of having Tilt rebuild it.
@@ -82,10 +91,18 @@ with_topograph      = cfg.get('topograph', False)
 with_observability  = cfg.get('observability', False)
 with_dynamo         = cfg.get('dynamo', False)
 with_slinky         = cfg.get('slinky', False)
+with_tas            = cfg.get('tas', False)
 with_control_plane  = cfg.get('control-plane', False)
 
-# --topograph needs cliques, which only the compute-domain cluster has. It reads
-# the static clique labels directly, so the DRA driver is not implied.
+# --tas is --topograph and --slinky pointed at each other. It comes first so
+# their own implications still apply.
+if with_tas:
+    with_topograph = True
+    with_slinky = True
+
+# --topograph needs cliques, which only the compute-domain and tas clusters
+# have. It reads the static clique labels directly, so the DRA driver is not
+# implied.
 if with_topograph:
     with_compute_domain = True
 
@@ -125,7 +142,12 @@ gpu_profile = cfg.get('gpu-profile', '')
 if with_compute_domain and gpu_profile:
     fail('--compute-domain forces gpu.profile=gb200; do not pass --gpu-profile explicitly')
 
-k8s_context_default = 'kind-mokka-compute-domain' if with_compute_domain else 'kind-mokka'
+if with_tas:
+    k8s_context_default = 'kind-mokka-tas'
+elif with_compute_domain:
+    k8s_context_default = 'kind-mokka-compute-domain'
+else:
+    k8s_context_default = 'kind-mokka'
 k8s_context         = cfg.get('k8s-context', k8s_context_default)
 
 active_consumers = []
@@ -159,7 +181,11 @@ if with_control_plane:
 
 if with_compute_domain:
     compute_domain_build_images(with_dra)
-    nvml_mock_releases = compute_domain_install(active_consumers, control_plane=with_control_plane)
+    nvml_mock_releases = compute_domain_install(
+        active_consumers,
+        control_plane=with_control_plane,
+        topology_values=tas_topology_values if with_tas else None,
+    )
 elif multi_gpu_profile:
     build_nvml_mock_image(nvmlmock_image=nvmlmock_image)
     nvml_mock_releases = install_fleet(
@@ -211,6 +237,9 @@ if with_gpu_operator:
         gpu_operator_extra_values.append(observability_gpu_operator_values)
         gpu_operator_extra_deps += observability_releases
 
+    if with_tas:
+        gpu_operator_extra_values.append(tas_gpu_operator_values)
+
     gpu_operator_install(
         nvml_mock_releases,
         extra_values=gpu_operator_extra_values,
@@ -240,13 +269,23 @@ if with_fgo:
     fgo_install(nvml_mock_releases)
 
 if with_topograph:
-    topograph_install(nvml_mock_releases)
+    topograph_install(
+        nvml_mock_releases,
+        extra_values=[tas_topograph_values] if with_tas else [],
+        extra_resource_deps=tas_topograph_deps if with_tas else [],
+    )
 
 if with_dynamo:
     dynamo_install(nvml_mock_releases)
 
 if with_slinky:
-    slinky_install(nvml_mock_releases)
+    slinky_install(
+        nvml_mock_releases,
+        extra_values=[tas_slurm_values] if with_tas else [],
+    )
+
+if with_tas:
+    tas_install()
 
 # Manual: the pod cannot run before the device plugin advertises nvidia.com/gpu.
 if with_gpu_operator:
