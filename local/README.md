@@ -30,10 +30,12 @@ The default profile spans 1 control-plane + 2 workers (a100 + t4), so no cluster
 |---------------------|---------------------------------------|---------------------------------|----------------------------------------------------------------------|
 | `default` (default) | `local/kind/default.kind.yaml`        | `kind-mokka`                    | basic, gpu-operator, dra, `--multi-gpu-profile`, `--fgo`, `--slinky` |
 | `compute-domain`    | `local/kind/compute-domain.kind.yaml` | `kind-mokka-compute-domain`     | `--compute-domain`                                                   |
+| `tas`               | `local/kind/tas.kind.yaml`            | `kind-mokka-tas`                | `--tas`                                                              |
 
 ```bash
 make cluster-create                         # 1 CP + 2 workers (a100 / t4) — the default
 make cluster-create PROFILE=compute-domain  # 1 CP + 4 workers (NVLink cliques)
+make cluster-create PROFILE=tas             # 1 CP + 4 workers in two NVLink cliques of two
 
 make cluster-delete                         # tear down (PROFILE= must match creation)
 ```
@@ -192,6 +194,24 @@ kubectl -n slurm exec slurm-controller-0 -c slurmctld -- srun -N1 --gres=gpu:2 n
 ```
 
 The `slurm-nodes` resource waits for the GPU Operator to be healthy, then stays pending until every `slurmd` pod is Ready, and prints `sinfo`. The manual **slurm-smoke** trigger under the `slinky-tests` label asserts every node registered its GPUs, that a 2-GPU job gets exactly 2 of the node's profile, and that a job using every GPU on every node runs. `slurmd` detects GPUs once at startup and `slurmctld` keeps a node's first GPU-to-CPU binding, so after reinstalling nvml-mock or switching `--gpu-profile`, delete the node records (`scontrol delete nodename=...`) and then the `slurmd` pods. The [Slinky guide](../docs/guides/slinky/README.md) walks through the same setup from published artifacts and covers what a job does and does not see.
+
+### Topology-aware scheduling (`--tas`, requires `PROFILE=tas` cluster)
+
+Shows Slurm placing a multi-node job whole inside one NVLink domain, with the domains discovered by [topograph](https://github.com/NVIDIA/topograph) rather than written by hand. The `tas` cluster has four workers in two NVLink cliques of two, `worker-0`/`worker-1` and `worker-2`/`worker-3`. Each worker's `nvidia.com/gpu.clique` label and the fabric its mock driver reports (`local/tas/topology.yaml`) name the same clique.
+
+`--tas` implies `--topograph` and `--slinky`, and through them `--compute-domain` and `--gpu-operator`. On top of those it runs topograph with its `dra` provider and `slinky` engine, Slurm with `TopologyPlugin=topology/block`, and the mock with the `tas` fabric. topograph hands Slurm one block per clique in two parts: the block names in `topology.conf` (ConfigMap `slurm-config-extra`, which the controller's reconfigure sidecar applies in place), and each node's block as the `topology.slinky.slurm.net/spec` Node annotation, which the slurm-operator copies onto the Slurm node within seconds, without restarting `slurmd`. The `slurmd` pods are Slurm dynamic nodes, which `slurmctld` does not know when it reads `topology.conf`, so the file cannot list them.
+
+GPU Feature Discovery rewrites `nvidia.com/gpu.clique` from the fabric the mock reports, so `--tas` also opts the GPU Operator's operand pods into the nvml-mock NRI plugin (`local/tas/gpu-operator.values.yaml`); without it, GFD would relabel every worker with the profile's single default clique.
+
+```bash
+make cluster-create PROFILE=tas
+tilt up -- --tas
+kubectl -n slurm exec slurm-controller-0 -c slurmctld -- scontrol show topology
+```
+
+The `tas-topology` resource stays pending until Slurm's blocks group the nodes exactly as their clique labels do, then prints the topology; a fresh `tilt ci -- --tas` takes about ten minutes. The manual **tas-gang** trigger under the `tas-tests` label (or `NAMESPACE=slurm bash local/tas/scenarios/gang.sh`) reads the blocks from Slurm and asserts three placements: two 2-node jobs run at once on one whole block each; with one node of a block busy, a 2-node job takes the other block rather than pairing nodes across blocks; and with one node busy in each block, a 2-node job waits, with reason `No suitable topology unit found`, although two nodes are idle. `check-fabric` and `topology-rebind` are not registered under `--tas`, since they assert the compute-domain layout.
+
+Helm and topograph share `topology.conf`, so every `helm upgrade` of the `slurm` release, including a later `tilt up -- --tas`, resets it to the seed in `local/tas/slurm.values.yaml` until topograph next rewrites it. Scheduling carries on because the seed names topograph's blocks (`block001`, `block002`); if you change the cliques, update the seed to match, or `tas-topology` fails reporting different block names in `topology.conf` and in `slurmctld`.
 
 ## Helm value overrides for nvml-mock
 
