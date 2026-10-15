@@ -11,7 +11,10 @@
 # onto the Slurm node. Until both have happened Slurm runs on the seed block,
 # which holds no node.
 #
-# Usage: wait-topology.sh [namespace] [timeout-seconds]
+# The labels are re-read every round: GFD rewrites them once it starts, and a
+# GFD that misses the topology overlay collapses all nodes into one clique.
+#
+# Usage: [NODE_SELECTOR=<label-selector>] wait-topology.sh [namespace] [timeout-seconds]
 set -euo pipefail
 
 NAMESPACE="${1:-slurm}"
@@ -25,7 +28,7 @@ slurm() {
 
 # One line per clique: its node names, sorted and comma-joined.
 cliques() {
-  kubectl get nodes -l "$NODE_SELECTOR" \
+  kubectl get nodes -l "$NODE_SELECTOR" --request-timeout=30s \
     -o jsonpath='{range .items[*]}{.metadata.labels.nvidia\.com/gpu\.clique}|{.metadata.name}{"\n"}{end}' |
     awk -F'|' '$1 != "" { g[$1] = ($1 in g) ? g[$1] "," $2 : $2 } END { for (k in g) print g[k] }' |
     while read -r group; do tr ',' '\n' <<<"$group" | sort | paste -sd, -; done | sort
@@ -39,25 +42,24 @@ blocks() {
     while read -r list; do slurm scontrol show hostnames "$list" | sort | paste -sd, -; done | sort
 }
 
-expected=$(cliques)
-if (( $(grep -c . <<<"$expected") < 2 )); then
-  echo "nodes matching $NODE_SELECTOR form fewer than two cliques (${expected:-none});" \
-    "is this the tas cluster (make cluster-create PROFILE=tas)?" >&2
-  exit 1
-fi
-
 deadline=$(( $(date +%s) + TIMEOUT_S ))
 while :; do
-  engine=$(kubectl -n "$NAMESPACE" get configmap slurm-config-extra \
+  expected=$(cliques 2>/dev/null || true)
+  ncliques=$(grep -c . <<<"$expected" || true)
+  engine=$(kubectl -n "$NAMESPACE" get configmap slurm-config-extra --request-timeout=30s \
     -o jsonpath='{.metadata.annotations.topograph\.run/engine}' 2>/dev/null || true)
   actual=$(blocks 2>/dev/null || true)
-  if [[ "$engine" == "slinky" && "$actual" == "$expected" ]]; then
+  if (( ncliques >= 2 )) && [[ "$engine" == "slinky" && "$actual" == "$expected" ]]; then
     break
   fi
   if (( $(date +%s) >= deadline )); then
     {
       echo "timed out after ${TIMEOUT_S}s waiting for Slurm blocks to match the cliques"
-      echo "cliques:"; sed 's/^/  /' <<<"$expected"
+      if (( ncliques < 2 )); then
+        echo "nodes matching $NODE_SELECTOR form fewer than two cliques;" \
+          "is this the tas cluster (make cluster-create PROFILE=tas)?"
+      fi
+      echo "cliques:"; sed 's/^/  /' <<<"${expected:-<none>}"
       echo "Slurm blocks with nodes:"; sed 's/^/  /' <<<"${actual:-<none>}"
       echo "slurm-config-extra written by: ${engine:-<not topograph>}"
       kubectl get nodes -l "$NODE_SELECTOR" \
