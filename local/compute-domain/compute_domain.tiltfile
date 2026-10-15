@@ -160,7 +160,7 @@ def install(active_consumers, control_plane=False, topology_values=None):
 
     # Both triggers assert local/compute-domain/topology.yaml worker by
     # worker, so a caller with its own topology gets neither.
-    if topology_values == None:
+    if not topology_values:
         # Scenario 1: per-node fabric identity via check-fabric. Manually
         # triggered — hitting the button asserts the topology overlay
         # rendered the expected cliqueId / clusterUuid / state on each node.

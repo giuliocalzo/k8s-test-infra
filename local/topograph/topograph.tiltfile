@@ -42,7 +42,12 @@ def install(nvml_mock_releases, extra_values=[], extra_resource_deps=[]):
         'topograph',
         'topograph-repo/topograph',
         namespace='topograph',
-        flags=['--create-namespace', '--version', _CHART_VERSION] + values_flags + ['--timeout', '300s'],
+        flags=[
+            '--create-namespace',
+            '--version', _CHART_VERSION,
+        ] + values_flags + [
+            '--timeout', '300s',
+        ],
         # nvml-mock dep is for Tilt UI ordering; topograph reads from
         # the Kubernetes API (static node labels) so there is no
         # technical runtime dependency on nvml-mock.
