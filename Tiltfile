@@ -119,7 +119,7 @@ if with_dynamo:
 if with_slinky:
     with_gpu_operator = True
 
-# --gpu-operator with --compute-domain is allowed but untested.
+# --gpu-operator with --compute-domain is allowed but untested outside --tas.
 if with_compute_domain and multi_gpu_profile:
     fail('--compute-domain is mutually exclusive with --multi-gpu-profile ' +
          '(compute-domain uses its own 4-worker cluster shape)')

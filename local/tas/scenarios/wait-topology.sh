@@ -8,8 +8,8 @@
 # The topology reaches slurmctld in two hops that both land after the slurmd
 # pods are Ready: topograph rewrites topology.conf, which the reconfigure
 # sidecar applies, and annotates each Node, which the slurm-operator copies
-# onto the Slurm node. Until both have happened Slurm runs on the seed block,
-# which holds no node.
+# onto the Slurm node. Until the annotations land, the seed blocks hold no
+# node.
 #
 # The labels are re-read every round: GFD rewrites them once it starts, and a
 # GFD that misses the topology overlay collapses all nodes into one clique.
