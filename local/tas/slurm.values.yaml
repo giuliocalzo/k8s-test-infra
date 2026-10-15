@@ -13,9 +13,14 @@ controller:
   inplaceReconfigure: true
 
 configFiles:
-  # Placeholder until topograph writes the real blocks. slurmctld exits on
-  # topology/block with no BlockName, so this names one block, and no node:
-  # nothing but topograph can put a node in a block.
+  # The blocks topograph will write, minus their nodes: slurmctld exits on
+  # topology/block with no BlockName, and only topograph puts nodes in blocks.
+  # Helm and topograph share this file, so every helm upgrade reverts it to
+  # this seed. The names must stay topograph's (block001.. per clique, two
+  # cliques on the tas cluster): Slurm nodes keep their default:block00N
+  # topology, and every reconfigure fails while the file drops a block they
+  # name.
   topology.conf: |
-    BlockName=tas-seed
+    BlockName=block001
+    BlockName=block002
     BlockSizes=2,4

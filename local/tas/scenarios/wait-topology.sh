@@ -42,6 +42,16 @@ blocks() {
     while read -r list; do slurm scontrol show hostnames "$list" | sort | paste -sd, -; done | sort
 }
 
+# Block names, one per line: in topology.conf as stored, and as slurmctld
+# loaded them. They differ while a reconfigure fails, during which Slurm keeps
+# scheduling on blocks the file no longer has.
+names() { awk '/^BlockName=/ { split($1, kv, "="); print kv[2] }' | sort | paste -sd' ' -; }
+stored_names() {
+  kubectl -n "$NAMESPACE" get configmap slurm-config-extra --request-timeout=30s \
+    -o jsonpath='{.data.topology\.conf}' | names
+}
+loaded_names() { slurm scontrol show topology | names; }
+
 deadline=$(( $(date +%s) + TIMEOUT_S ))
 while :; do
   expected=$(cliques 2>/dev/null || true)
@@ -49,7 +59,10 @@ while :; do
   engine=$(kubectl -n "$NAMESPACE" get configmap slurm-config-extra --request-timeout=30s \
     -o jsonpath='{.metadata.annotations.topograph\.run/engine}' 2>/dev/null || true)
   actual=$(blocks 2>/dev/null || true)
-  if (( ncliques >= 2 )) && [[ "$engine" == "slinky" && "$actual" == "$expected" ]]; then
+  stored=$(stored_names 2>/dev/null || true)
+  loaded=$(loaded_names 2>/dev/null || true)
+  if (( ncliques >= 2 )) && [[ "$engine" == "slinky" && "$actual" == "$expected" &&
+        -n "$loaded" && "$stored" == "$loaded" ]]; then
     break
   fi
   if (( $(date +%s) >= deadline )); then
@@ -62,6 +75,7 @@ while :; do
       echo "cliques:"; sed 's/^/  /' <<<"${expected:-<none>}"
       echo "Slurm blocks with nodes:"; sed 's/^/  /' <<<"${actual:-<none>}"
       echo "slurm-config-extra written by: ${engine:-<not topograph>}"
+      echo "blocks in topology.conf: ${stored:-<none>}; loaded by slurmctld: ${loaded:-<none>}"
       kubectl get nodes -l "$NODE_SELECTOR" \
         -o custom-columns='NODE:.metadata.name,SPEC:.metadata.annotations.topology\.slinky\.slurm\.net/spec'
     } >&2
