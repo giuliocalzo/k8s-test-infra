@@ -54,6 +54,13 @@ load('./local/dynamo/dynamo.tiltfile',
 load('./local/slinky/slinky.tiltfile',
      slinky_install='install',
      slinky_upsert_timeout_s='UPSERT_TIMEOUT_S')
+load('./local/tas/tas.tiltfile',
+     tas_install='install',
+     tas_topology_values='TOPOLOGY_VALUES',
+     tas_gpu_operator_values='GPU_OPERATOR_VALUES',
+     tas_topograph_values='TOPOGRAPH_VALUES',
+     tas_slurm_values='SLURM_VALUES',
+     tas_topograph_deps='TOPOGRAPH_DEPS')
 
 # --- Flags ---------------------------------------------------------------
 config.define_string('gpu-profile', args=False,
@@ -81,6 +88,8 @@ config.define_bool('dynamo', args=False,
     usage='Also deploy NVIDIA Dynamo (operator only) and an aggregated DynamoGraphDeployment whose worker runs the mocker engine on a mock GPU, plus a manual dynamo-smoke trigger. Implies --gpu-operator (the worker requests nvidia.com/gpu). OpenAI API on http://localhost:8000.')
 config.define_bool('slinky', args=False,
     usage='Also deploy Slinky (cert-manager, slurm-operator and a Slurm cluster) with one slurmd per mock-GPU worker; Slurm discovers the GPUs via gres.conf AutoDetect. Implies --gpu-operator (slurmd requests nvidia.com/gpu). Fits any cluster shape; combine with --compute-domain for a 4-node GB200 Slurm cluster.')
+config.define_bool('tas', args=False,
+    usage='Topology-aware scheduling scenario: topograph turns the NVLink cliques into Slurm topology/block blocks, so a multi-node Slurm job runs whole inside one clique or waits; adds the tas-topology readiness check and a manual tas-gang trigger. Implies --topograph and --slinky. Requires the tas Kind cluster: make cluster-create PROFILE=tas.')
 config.define_bool('control-plane', args=False,
     usage='Also deploy the Mokka Control Plane (MEP-0001) alongside nvml-mock. Off by default. Composes with --multi-gpu-profile (the first profile release owns the single CP), --compute-domain, and --nvmlmock-image.')
 # CI hook: hand Tilt a pre-built image (in CI, loaded from the workflow's image
@@ -104,14 +113,22 @@ with_topograph      = cfg.get('topograph', False)
 with_observability  = cfg.get('observability', False)
 with_dynamo         = cfg.get('dynamo', False)
 with_slinky         = cfg.get('slinky', False)
+with_tas            = cfg.get('tas', False)
 with_control_plane  = cfg.get('control-plane', False)
 
 # --- Implicit flags ------------------------------------------------------
+# --tas implies --topograph and --slinky: it is the two of them, pointed at
+# each other. It must come first so their own implications still apply.
+if with_tas:
+    with_topograph = True
+    with_slinky = True
+
 # --topograph implies --compute-domain: cliques only exist in the
-# compute-domain cluster (local/kind/compute-domain.kind.yaml carries
+# compute-domain and tas clusters (their Kind configs carry
 # nvidia.com/gpu.clique labels as static node labels; topograph reads
-# them without requiring the DRA driver). The compute-domain Kind
-# cluster is still required (make cluster-create PROFILE=compute-domain).
+# them without requiring the DRA driver). One of those clusters is still
+# required (make cluster-create PROFILE=compute-domain, or PROFILE=tas
+# under --tas).
 if with_topograph:
     with_compute_domain = True
 
@@ -139,7 +156,8 @@ if with_slinky:
 # (gb200 for NVLink5 fabric APIs), so it cannot compose with --multi-gpu-profile
 # or with any --gpu-profile the user might pass. --gpu-operator is
 # allowed but experimental — the Operator's RuntimeClass path with the
-# compute-domain-imex layered image is untested.
+# compute-domain-imex layered image is untested outside --tas, which needs
+# local/tas/gpu-operator.values.yaml for GFD to report the right cliques.
 if with_compute_domain and multi_gpu_profile:
     fail('--compute-domain is mutually exclusive with --multi-gpu-profile ' +
          '(compute-domain uses its own 4-worker cluster shape)')
@@ -167,7 +185,12 @@ if with_compute_domain and gpu_profile_raw != None:
 
 gpu_profile = gpu_profile_raw or 'a100'
 
-k8s_context_default = 'kind-mokka-compute-domain' if with_compute_domain else 'kind-mokka'
+if with_tas:
+    k8s_context_default = 'kind-mokka-tas'
+elif with_compute_domain:
+    k8s_context_default = 'kind-mokka-compute-domain'
+else:
+    k8s_context_default = 'kind-mokka'
 k8s_context         = cfg.get('k8s-context', k8s_context_default)
 
 # --- Derived state -------------------------------------------------------
@@ -215,7 +238,11 @@ if with_control_plane:
 
 if with_compute_domain:
     compute_domain_build_images(with_dra)
-    nvml_mock_releases = compute_domain_install(active_consumers, control_plane=with_control_plane)
+    nvml_mock_releases = compute_domain_install(
+        active_consumers,
+        control_plane=with_control_plane,
+        topology_values=tas_topology_values if with_tas else None,
+    )
 elif multi_gpu_profile:
     build_nvml_mock_image(nvmlmock_image=nvmlmock_image)
     nvml_mock_releases = install_fleet(
@@ -279,6 +306,9 @@ if with_gpu_operator:
         gpu_operator_extra_values.append(observability_gpu_operator_values)
         gpu_operator_extra_deps += observability_releases
 
+    if with_tas:
+        gpu_operator_extra_values.append(tas_gpu_operator_values)
+
     gpu_operator_install(
         nvml_mock_releases,
         extra_values=gpu_operator_extra_values,
@@ -313,13 +343,23 @@ if with_fgo:
     fgo_install(nvml_mock_releases)
 
 if with_topograph:
-    topograph_install(nvml_mock_releases)
+    topograph_install(
+        nvml_mock_releases,
+        extra_values=[tas_topograph_values] if with_tas else [],
+        extra_resource_deps=tas_topograph_deps if with_tas else [],
+    )
 
 if with_dynamo:
     dynamo_install(nvml_mock_releases)
 
 if with_slinky:
-    slinky_install(nvml_mock_releases)
+    slinky_install(
+        nvml_mock_releases,
+        extra_values=[tas_slurm_values] if with_tas else [],
+    )
+
+if with_tas:
+    tas_install()
 
 # --- Test workload -------------------------------------------------------
 # GPU validator pod, disabled by default (enable from the Tilt UI). Requests

@@ -582,21 +582,21 @@ test-e2e-framework:
 KIND_NODE_IMAGE   ?= kind-node-nv:latest
 # Cluster profile (select via PROFILE=<name>):
 #   - PROFILE=default (default)  local/kind/default.kind.yaml        (1 CP + 2 workers labelled a100 / t4)
-#   - PROFILE=compute-domain     local/kind/compute-domain.kind.yaml (1 CP + 4 workers labelled clique 0 / 1)
+#   - PROFILE=compute-domain     local/kind/compute-domain.kind.yaml (1 CP + 4 workers, one clique each)
+#   - PROFILE=tas                local/kind/tas.kind.yaml            (1 CP + 4 workers in two cliques of two)
 # Consumer selection (--gpu-operator / --dra / --fgo / --multi-gpu-profile)
 # happens in the Tiltfile — the default cluster shape supports every consumer
 # scenario without a rebuild.
-# compute-domain also changes the cluster name because topology.yaml
-# hardcodes worker names as <cluster-name>-worker[N] — see
-# local/compute-domain/topology.yaml and local/kind/compute-domain.kind.yaml.
+# Every profile but default names its cluster mokka-<profile>, so profiles can
+# run side by side and Tilt can pick the matching kind-<name> context.
 # Note: distinct from Tilt's --gpu-profile (a100|gb200|...) — this PROFILE
 # picks the Kind cluster topology; --gpu-profile picks the simulated GPU.
 PROFILE ?= default
-_VALID_PROFILES := default compute-domain
+_VALID_PROFILES := default compute-domain tas
 ifeq ($(filter $(PROFILE),$(_VALID_PROFILES)),)
 $(error PROFILE=$(PROFILE) is not valid. Choose one of: $(_VALID_PROFILES))
 endif
-KIND_CLUSTER_NAME   ?= $(if $(filter compute-domain,$(PROFILE)),mokka-compute-domain,mokka)
+KIND_CLUSTER_NAME   ?= $(if $(filter default,$(PROFILE)),mokka,mokka-$(PROFILE))
 KIND_CLUSTER_CONFIG ?= local/kind/$(PROFILE).kind.yaml
 
 .PHONY: image-kind-node image-load cluster-create cluster-delete

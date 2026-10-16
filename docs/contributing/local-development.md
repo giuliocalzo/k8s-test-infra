@@ -20,16 +20,18 @@ Every cluster uses a custom Kind node image built from
 `deployments/kind-nvidia-cdi/`, which pre-installs the NVIDIA container runtime
 and bakes CDI into containerd. `make cluster-create` builds it if needed.
 
-Two cluster shapes exist, selected with `PROFILE`:
+Three cluster shapes exist, selected with `PROFILE`:
 
 | `PROFILE` | Shape | Cluster name | Use with |
 |---|---|---|---|
-| `default` | 1 control-plane + 2 workers | `mokka` | everything except compute-domain |
+| `default` | 1 control-plane + 2 workers | `mokka` | everything except compute-domain and tas |
 | `compute-domain` | 1 control-plane + 4 workers with NVLink cliques | `mokka-compute-domain` | `--compute-domain`, `--topograph` |
+| `tas` | 1 control-plane + 4 workers in two NVLink cliques of two | `mokka-tas` | `--tas` |
 
 ```bash
 make cluster-create                         # default
 make cluster-create PROFILE=compute-domain
+make cluster-create PROFILE=tas
 
 make cluster-delete                         # PROFILE must match creation
 ```
@@ -68,6 +70,7 @@ the `a100` profile. Everything else is a flag.
 | `--observability` | kube-prometheus-stack and a Grafana dashboard for the mock fleet |
 | `--dynamo` | The NVIDIA Dynamo operator and a `qwen3` inference graph whose mocker worker runs on a mock GPU |
 | `--slinky` | cert-manager, the Slinky slurm-operator and a Slurm cluster with one GPU `slurmd` per mock-GPU worker |
+| `--tas` | topograph feeding the NVLink cliques to Slurm as block topology. Needs the `tas` cluster; see the [`--tas` scenario](https://github.com/NVIDIA/k8s-test-infra/blob/main/local/README.md#topology-aware-scheduling---tas-requires-profiletas-cluster) |
 | `--control-plane` | The Mokka control-plane image and the `mokka-crds` chart |
 
 ### What composes and what does not
@@ -80,10 +83,11 @@ Most flags stack. These do not:
 | `--fgo` with `--compute-domain` | Different fleet shapes |
 | `--compute-domain` with `--multi-gpu-profile` or `--gpu-profile` | The compute-domain scenario fixes both |
 
-Four flags imply others: `--topograph` implies `--compute-domain`, because
+Five flags imply others: `--topograph` implies `--compute-domain`, because
 cliques only exist there; `--observability` implies `--gpu-operator`, because
 `dcgm-exporter` is one of its operands; `--dynamo` and `--slinky` imply
-`--gpu-operator`, because their workloads request `nvidia.com/gpu`.
+`--gpu-operator`, because their workloads request `nvidia.com/gpu`; `--tas`
+implies `--topograph` and `--slinky`, the two parts it connects.
 
 ```bash
 tilt up -- --gpu-profile gb200

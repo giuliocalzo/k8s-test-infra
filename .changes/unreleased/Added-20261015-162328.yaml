@@ -1,0 +1,4 @@
+kind: Added
+body: |-
+  A `--tas` Tilt scenario on a new `PROFILE=tas` Kind cluster: topograph turns its two NVLink cliques into Slurm block topology, so a multi-node Slurm job runs whole inside one clique or waits.
+time: 2026-10-15T14:23:28Z

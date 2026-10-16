@@ -1,0 +1,26 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+#
+# slurm chart overlay for the --tas scenario, layered after
+# local/slinky/slurm.values.yaml. Turns on block topology and lets topograph
+# rewrite it without recreating the controller.
+
+controller:
+  extraConfMap:
+    TopologyPlugin: ["topology/block"]
+  # topograph rewrites topology.conf in slurm-config-extra; the reconfigure
+  # sidecar applies the change with `scontrol reconfigure`.
+  inplaceReconfigure: true
+
+configFiles:
+  # The blocks topograph will write, minus their nodes: slurmctld exits on
+  # topology/block with no BlockName, and only topograph puts nodes in blocks.
+  # Helm and topograph share this file, so every helm upgrade reverts it to
+  # this seed. The names must stay topograph's (block001.. per clique, two
+  # cliques on the tas cluster): Slurm nodes keep their default:block00N
+  # topology, and every reconfigure fails while the file drops a block they
+  # name.
+  topology.conf: |
+    BlockName=block001
+    BlockName=block002
+    BlockSizes=2,4

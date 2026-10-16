@@ -1,0 +1,64 @@
+# Copyright 2026 NVIDIA CORPORATION
+# SPDX-License-Identifier: Apache-2.0
+#
+# topograph overlay for the --tas scenario, layered after
+# local/topograph/topograph.values.yaml. Turns the nvidia.com/gpu.clique node
+# labels into Slurm topology/block blocks for the Slinky cluster.
+#
+# nodeDataBroker stays on (chart default): its DaemonSet writes the
+# topograph.nvidia.com/instance and region Node annotations the engine maps
+# nodes by.
+
+# One block per clique value, read from the Kubernetes API.
+provider:
+  name: dra
+  params:
+    accelerator:
+      source: kubernetes-label
+      kubernetesLabel:
+        key: nvidia.com/gpu.clique
+    nodeSelector:
+      mokka.nvidia.com/type: sgpu
+
+engine:
+  name: slinky
+  params:
+    namespace: slurm
+    nodeSelector:
+      mokka.nvidia.com/type: sgpu
+    # The gpu NodeSet's slurmd pods (local/slinky/slurm.values.yaml). In
+    # DaemonSet mode a pod's hostname is its Kubernetes node name, which is
+    # also its Slurm node name.
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/instance: slurm-worker-gpu
+    plugin: topology/block
+    # 2 is one clique. 4 aggregates both, so a job spanning the whole fleet
+    # can still run.
+    blockSizes: [2, 4]
+    # slurmd pods are Slurm dynamic nodes, unknown to slurmctld when it reads
+    # topology.conf at startup, and a block naming an unknown node is fatal
+    # there. So topology.conf carries only the block names, and each node's
+    # block travels as the topology.slinky.slurm.net/spec Node annotation,
+    # which the slurm-operator applies to the registered Slurm node.
+    useDynamicNodes: true
+    configUpdateMode: skeleton-only
+    topologyConfigmapName: slurm-config-extra
+    topologyConfigPath: topology.conf
+
+config:
+  # The chart's 15s only delays a local bring-up.
+  requestAggregationDelay: 2s
+
+nodeObserver:
+  topograph:
+    # Regenerate when a worker or one of its slurmd pods comes or goes; the
+    # engine skips slurmd pods that are not Ready.
+    trigger:
+      nodeSelector:
+        mokka.nvidia.com/type: sgpu
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: worker
+          app.kubernetes.io/instance: slurm-worker-gpu
