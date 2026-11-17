@@ -1,6 +1,16 @@
-# Mokka
+---
+# The page opens with the hero <div>, so MkDocs cannot infer a title from the
+# H1 below it and falls back to the filename. Set it explicitly.
+title: Overview
+---
 
-Simulate your GPU infrastructure on CPU nodes.
+<div class="mokka-hero" markdown>
+![Mokka](img/logo.png)
+
+<p class="mokka-tagline">Simulate your GPU infrastructure on CPU nodes.</p>
+</div>
+
+# Mokka
 
 Mokka simulates the software contracts around NVIDIA devices rather than the
 devices themselves. The rule of thumb: reach for Mokka when your system **reads**
@@ -79,6 +89,7 @@ topology, counters and failures are synthesised.
 | NVIDIA GPU Operator      | The full operand stack installs and its validator starts                                  |
 | DCGM / dcgm-exporter     | Telemetry, time-varying power, and injected Xid errors                                    |
 | Run:ai fake-gpu-operator | Profile ConfigMaps published in the shape its discovery expects                           |
+| HAMi                     | Pods share a GPU through `nvidia.com/gpumem`, and each sees its own cap in `nvidia-smi`   |
 | Slurm via Slinky         | `slurmd` autodetects the GPUs as GRES, and `srun --gres=gpu:N` jobs schedule against them |
 | Topograph                | NVLink cliques become per-node accelerator-domain labels for topology-aware schedulers    |
 
@@ -109,7 +120,7 @@ topology, counters and failures are synthesised.
 
     Local development with Tilt, the test suites, and how to submit a change.
 
-    [Contributing](https://github.com/NVIDIA/k8s-test-infra/blob/main/docs/contributing/index.md)
+    [Contributing](contributing/index.md)
 
 </div>
 

@@ -29,24 +29,22 @@ to verify DaemonSet placement:
 | Workers | 2 × on-demand `t3.large` | CPU-only, enough memory for system and Mokka pods |
 | Worker image | EKS-optimized standard AL2023 x86_64, `1.35.7-20260911` | Plain containerd under systemd and no NVIDIA software, so Mokka sets up the NVIDIA runtime itself |
 | Worker placement | Private subnets in two availability zones, one shared NAT gateway | Runs one Mokka pod per worker without public worker IPs while keeping the reference cluster's NAT cost down |
-| Mokka | chart and image `0.5.0`, `gb300` profile | Pins the newest compatible published chart and image pair |
+| Mokka | latest release; last validated with `0.5.0`, `gb300` profile | The install below takes the latest published chart, whose default image tag is the chart's appVersion |
 | Device plugin | `nvcr.io/nvidia/k8s-device-plugin:v0.18.2` | Advertises `nvidia.com/gpu` through Mokka's NVML implementation |
-| Container toolkit | `1.19.1`, shipped in the Mokka image | Mokka installs the NVIDIA runtime and CDI hook on each worker and registers the runtime with containerd |
+| Container toolkit | `1.19.1`, shipped in the Mokka `0.5.0` image | Mokka installs the NVIDIA runtime and CDI hook on each worker and registers the runtime with containerd |
 
 These versions record a reproducible Mokka validation target; they are not an
 AWS support statement. When updating Kubernetes or the AL2023 release, repeat
 the neutral-workload test rather than assuming the runtime configuration is
 unchanged.
 
-<Warning>
-**Use a test AWS account**
+!!! warning "Use a test AWS account"
 
-The optional Terraform configuration creates IAM roles, networking, an EKS
-cluster, and EC2 instances. Use an isolated account or obtain approval for
-those resources. The `aws_account_id` variable prevents an accidental
-apply to a different account, but it is not a substitute for
-least-privilege IAM.
-</Warning>
+    The optional Terraform configuration creates IAM roles, networking, an EKS
+    cluster, and EC2 instances. Use an isolated account or obtain approval for
+    those resources. The `aws_account_id` variable prevents an accidental
+    apply to a different account, but it is not a substitute for
+    least-privilege IAM.
 
 ## Prerequisites
 
@@ -129,17 +127,15 @@ newer. Your AWS identity needs permission to manage EKS, EC2 networking and
 instances, IAM roles, Key Management Service (KMS) keys, and CloudWatch log
 groups. A production account should use narrowly scoped permissions.
 
-<Warning>
-**Cluster-creator access is only for the reference cluster**
+!!! warning "Cluster-creator access is only for the reference cluster"
 
-The template sets `enable_cluster_creator_admin_permissions = true`. The
-EKS module creates an access entry that grants the Terraform caller the
-`AmazonEKSClusterAdminPolicy`, which provides full cluster-admin access.
-This keeps a disposable test cluster operable by the person who creates it;
-it is not a recommended production access model. Production deployments
-should manage access entries explicitly and grant each operator or role
-only the permissions it needs.
-</Warning>
+    The template sets `enable_cluster_creator_admin_permissions = true`. The
+    EKS module creates an access entry that grants the Terraform caller the
+    `AmazonEKSClusterAdminPolicy`, which provides full cluster-admin access.
+    This keeps a disposable test cluster operable by the person who creates it;
+    it is not a recommended production access model. Production deployments
+    should manage access entries explicitly and grant each operator or role
+    only the permissions it needs.
 
 Download the Terraform assets:
 
@@ -230,7 +226,6 @@ IP address. CoreDNS, `aws-node`, and `kube-proxy` should be Running.
 ```bash
 helm upgrade --install nvml-mock \
   oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
-  --version 0.5.0 \
   --kube-context "${MOKKA_CONTEXT}" \
   --namespace mokka \
   --create-namespace \

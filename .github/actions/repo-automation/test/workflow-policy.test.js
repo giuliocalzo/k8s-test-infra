@@ -72,13 +72,13 @@ test("privileged foundation workflows never execute pull-request code", () => {
   }
 });
 
-// The runbook is for maintainers, so docs/index.yml deliberately leaves it out of the
-// published site; contribution guidance is how a reader finds it.
-test("repository automation documentation is linked from contribution guidance", () => {
+test("repository automation documentation is in navigation and linked from contribution guidance", () => {
+  const navigation = fs.readFileSync(path.join(repositoryRoot, "mkdocs.yml"), "utf8");
   const contributing = fs.readFileSync(
     path.join(repositoryRoot, "docs", "contributing", "pull-requests.md"),
     "utf8",
   );
+  assert.match(navigation, /maintainers\/repository-automation\.md/);
   assert.match(contributing, /maintainers\/repository-automation/);
 });
 
@@ -104,4 +104,14 @@ test("foundation scope does not add excluded workflow families", () => {
   );
   assert.match(runbook, /GitHub native auto-merge/);
   assert.match(runbook, /does not (?:install|deploy) (?:Prow or )?Tide/i);
+});
+
+
+test("Pages builds follow MEP sources and the publishing hook", () => {
+  const { workflow } = read("deploy-pages.yaml");
+  for (const event of ["push", "pull_request"]) {
+    for (const changedPath of ["enhancements/**", "hack/mkdocs_meps.py", "hack/test_mkdocs_meps.py"]) {
+      assert.ok(workflow.on[event].paths.includes(changedPath), `${event}: ${changedPath}`);
+    }
+  }
 });

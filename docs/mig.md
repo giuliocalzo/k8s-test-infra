@@ -186,7 +186,7 @@ diagrams show.
 
 ## Where the table lives
 
-The table is a sibling document of the profile, not a section of it. The five
+The table is a sibling document of the profile, not a section of it. The six
 MIG-capable boards ship theirs twice, once per config tree:
 
 | | file |
@@ -223,21 +223,18 @@ a consumer whose config had no table beside it would see a board that cannot
 partition, and the device plugin would publish whole GPUs on a node where NVML
 reports partitions.
 
-<Warning>
-**A table declared inline *and* externally is refused**
+!!! warning "A table declared inline *and* externally is refused"
 
+    A config that keeps `supported_profiles` under `device_defaults.mig` while
+    a table also resolves fails to load, naming both sources. This is an
+    ambiguity rather than a precedence question: whichever table lost would be
+    one somebody authored and the mock silently ignored, and nothing a consumer
+    sees through NVML says which file is in force.
 
-A config that keeps `supported_profiles` under `device_defaults.mig` while
-a table also resolves fails to load, naming both sources. This is an
-ambiguity rather than a precedence question: whichever table lost would be
-one somebody authored and the mock silently ignored, and nothing a consumer
-sees through NVML says which file is in force.
-
-For an externally-authored config written against the old single-file
-layout, that is the migration instruction: **move** the table into a
-sibling document, do not copy it. Nothing the chart ships declares a table
-inline, so no chart install can reach this.
-</Warning>
+    For an externally-authored config written against the old single-file
+    layout, that is the migration instruction: **move** the table into a
+    sibling document, do not copy it. Nothing the chart ships declares a table
+    inline, so no chart install can reach this.
 
 ### A board with no resolvable table is not MIG-capable
 
@@ -308,7 +305,8 @@ enum for the same partition is a different number entirely. NVIDIA publishes no
 row's own NVML enum instead — `19` names nothing there and `0` is the 1-slice
 profile rather than the whole board. Name partitions by `profile` on those
 boards, and take any id from the mock's own listing rather than from a real
-board's.
+board's. `vrnvl72` is read off a real tray, so its ids are the tray's own, as on
+`a100` and `h100`.
 
 ## Declaring a layout explicitly
 

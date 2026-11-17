@@ -5,7 +5,7 @@ should match snapshot with b200 profile:
 
         Profile: b200
         GPUs per node: 4
-        Available profiles: a100, h100, b200, gb200, gb300, l40s, t4
+        Available profiles: a100, h100, b200, gb200, gb300, l40s, t4, vrnvl72
         Driver version: 580.65.06
         Mock driver root: /var/lib/nvml-mock/driver
         Mock config: /var/lib/nvml-mock/config/config.yaml
@@ -14,7 +14,7 @@ should match snapshot with b200 profile:
       in by annotation, get the mock driver when they are created. Pods in these
       namespaces never do: NAMESPACE, kube-system.
       If a node pod stays NotReady, containerd on that node may have NRI disabled; see
-      https://docs.nvidia.com/k8s-test-infra/general/troubleshooting#the-node-pod-is-notready-and-nvml-mock-nri-crash-loops
+      https://nvidia.github.io/k8s-test-infra/troubleshooting/#the-node-pod-is-notready-and-nvml-mock-nri-crash-loops
 
       NOTE: If you installed from source (no published image yet), you built the
       image locally and loaded it into your cluster. See the chart README for
@@ -72,7 +72,7 @@ should match snapshot with b200 profile:
         The overlay below carries that, plus the driver root the device plugin,
         GFD and dcgm-exporter each need in their environment.
         Walkthrough:
-          https://docs.nvidia.com/k8s-test-infra/guides/scenarios/nvidia-gpu-operator
+          https://nvidia.github.io/k8s-test-infra/guides/gpu-operator/
         In a checkout of this repository: docs/guides/with-gpu-operator/
 
         Install:
@@ -100,7 +100,7 @@ should match snapshot with default values:
 
         Profile: gb300
         GPUs per node: 4
-        Available profiles: a100, h100, b200, gb200, gb300, l40s, t4
+        Available profiles: a100, h100, b200, gb200, gb300, l40s, t4, vrnvl72
         Driver version: 580.65.06
         Mock driver root: /var/lib/nvml-mock/driver
         Mock config: /var/lib/nvml-mock/config/config.yaml
@@ -109,7 +109,7 @@ should match snapshot with default values:
       in by annotation, get the mock driver when they are created. Pods in these
       namespaces never do: NAMESPACE, kube-system.
       If a node pod stays NotReady, containerd on that node may have NRI disabled; see
-      https://docs.nvidia.com/k8s-test-infra/general/troubleshooting#the-node-pod-is-notready-and-nvml-mock-nri-crash-loops
+      https://nvidia.github.io/k8s-test-infra/troubleshooting/#the-node-pod-is-notready-and-nvml-mock-nri-crash-loops
 
       NOTE: If you installed from source (no published image yet), you built the
       image locally and loaded it into your cluster. See the chart README for
@@ -180,7 +180,7 @@ should match snapshot with default values:
         The overlay below carries that, plus the driver root the device plugin,
         GFD and dcgm-exporter each need in their environment.
         Walkthrough:
-          https://docs.nvidia.com/k8s-test-infra/guides/scenarios/nvidia-gpu-operator
+          https://nvidia.github.io/k8s-test-infra/guides/gpu-operator/
         In a checkout of this repository: docs/guides/with-gpu-operator/
 
         Install:

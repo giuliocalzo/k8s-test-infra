@@ -5,7 +5,7 @@ that presents simulated GPUs to the NVIDIA device plugin, the DRA driver, the
 GPU Operator and `nvidia-smi`, so GPU software can be exercised on nodes with
 no physical NVIDIA hardware.
 
-**Full documentation: <https://docs.nvidia.com/k8s-test-infra/general/getting-started/installation>**
+**Full documentation: <https://nvidia.github.io/k8s-test-infra/helm-chart/>**
 
 That guide covers the per-consumer walkthroughs (device plugin, DRA driver, GPU
 Operator, multi-node heterogeneous fleet), the complete values reference,
@@ -35,6 +35,11 @@ Set `gpu.profile` to one of the profiles shipped in `profiles/`:
 | `gb300` (default) | GB300 NVL | 278 GiB | Blackwell Ultra |
 | `l40s` | L40S | 48 GiB | Ada Lovelace |
 | `t4` | Tesla T4 | 16 GiB | Turing |
+| `vrnvl72` | Vera Rubin NVL72 | 280 GiB | Rubin |
+
+`vrnvl72` is one Vera Rubin compute tray. Its driver has no marketing name for
+the board yet, so the GPU name reads `NVIDIA Graphics Device`, as it does on the
+real tray.
 
 ```bash
 helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
@@ -89,8 +94,8 @@ its Deployment and RBAC still exist; retained CRDs cannot perform this cleanup.
 
 ## Links
 
-- [Documentation site](https://docs.nvidia.com/k8s-test-infra)
-- [Quick start](https://docs.nvidia.com/k8s-test-infra/general/getting-started/quick-start)
-- [Configuration reference](https://docs.nvidia.com/k8s-test-infra/general/reference/configuration)
-- [Troubleshooting](https://docs.nvidia.com/k8s-test-infra/general/troubleshooting)
+- [Documentation site](https://nvidia.github.io/k8s-test-infra/)
+- [Quick start](https://nvidia.github.io/k8s-test-infra/quickstart/)
+- [Configuration reference](https://nvidia.github.io/k8s-test-infra/configuration/)
+- [Troubleshooting](https://nvidia.github.io/k8s-test-infra/troubleshooting/)
 - [Source](https://github.com/NVIDIA/k8s-test-infra)

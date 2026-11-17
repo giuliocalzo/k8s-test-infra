@@ -35,6 +35,13 @@ docs/magi/
 
 tmp
 
+# MkDocs build output and hook bytecode
+hack/__pycache__/
+site/
+
+# MkDocs toolchain venv created by `make docs-deps`
+.venv-docs/
+
 # Terraform local state and per-user inputs. Provider selections remain tracked
 # through .terraform.lock.hcl for reproducible infrastructure tests.
 **/.terraform/

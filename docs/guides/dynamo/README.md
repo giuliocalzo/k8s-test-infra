@@ -46,36 +46,28 @@ profile the node runs.
 Takes about 15 minutes, most of it pulling the GPU Operator and Dynamo images.
 Both Dynamo images used here are multi-arch, so it runs on arm64 hosts too.
 
-## Step 1 — Create a cluster with NRI enabled
-
-The Mokka node image ships containerd with CDI enabled and the NVIDIA container
-runtime installed. The NRI plugin also needs containerd's NRI socket, which
-the config below turns on.
+## Step 1 — Create a cluster
 
 ```bash
 cat > kind.yaml <<'EOF'
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-containerdConfigPatches:
-  - |-
-    [plugins."io.containerd.nri.v1.nri"]
-      disable = false
-      disable_connections = false
-      socket_path = "/var/run/nri/nri.sock"
 nodes:
   - role: control-plane
   - role: worker
 EOF
 
-kind create cluster --name dynamo --config kind.yaml \
-  --image ghcr.io/nvidia/mokka-kind-node:latest
+kind create cluster --name dynamo --config kind.yaml
 ```
+
+Mokka's node daemon sets up containerd for both the GPU Operator and the NRI
+plugin when it starts in Step 2, so the cluster needs nothing more; see
+[Container runtime setup](../../components/node-daemon.md#container-runtime-setup).
 
 ## Step 2 — Install Mokka with the NRI plugin
 
 ```bash
 helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
-  --version 0.5.0 \
   --namespace mokka --create-namespace \
   --set nri.enabled=true \
   --set 'nri.excludedNamespaces={gpu-operator}' \
@@ -112,13 +104,10 @@ kubectl get node dynamo-worker -o jsonpath='{.status.allocatable.nvidia\.com/gpu
 Wait for a non-zero count before going on. Until the device plugin registers,
 the Dynamo worker has nowhere to schedule.
 
-<Warning>
-**Stay on v26.3.x for now**
-
-GPU Operator v26.7.1 gates every operand on an `nvidia` line in
-`/proc/modules`, which Mokka cannot serve to those containers, so GFD, the
-device plugin and `dcgm-exporter` never start.
-</Warning>
+!!! warning "Stay on v26.3.x for now"
+    GPU Operator v26.7.1 gates every operand on an `nvidia` line in
+    `/proc/modules`, which Mokka cannot serve to those containers, so GFD, the
+    device plugin and `dcgm-exporter` never start.
 
 ## Step 4 — Install the Dynamo platform
 
@@ -243,6 +232,18 @@ The operator has not installed its CRDs yet. Re-run the Step 4 install with
 `--wait`, or wait for its pod to be `Ready`.
 
 More symptoms in [Troubleshooting](../../troubleshooting.md).
+
+## Running it from a checkout
+
+With the repository cloned, the Tilt environment builds Mokka from source and
+runs this same stack, with an extra button that asserts it end to end:
+
+```bash
+make cluster-create
+tilt up -- --dynamo
+```
+
+See [Local Development](../../contributing/local-development.md#adding-consumers).
 
 ## Clean up
 

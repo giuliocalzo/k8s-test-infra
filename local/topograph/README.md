@@ -65,7 +65,7 @@ The node observer regenerates the topology whenever a
 
 | File                    | Purpose                                                                 |
 |-------------------------|-------------------------------------------------------------------------|
-| `topograph.tiltfile`    | Applies the `nvidia-smi` DaemonSet, then installs the pinned topograph chart from the dsx-ai-factory Helm repo |
+| `topograph.tiltfile`    | Applies the `nvidia-smi` DaemonSet, then installs the pinned topograph chart from its NGC Helm repo |
 | `topograph.values.yaml` | `infiniband-k8s` provider with the `nvidia-smi` accelerator source, `k8s` engine, worker-only node selection |
 | `nvidia-smi.k8s.yaml`   | The `topograph` namespace and the annotated `nvidia-smi` DaemonSet       |
 
@@ -84,7 +84,7 @@ The node observer regenerates the topology whenever a
    no label until the broker restarts. `topograph.tiltfile` orders the two;
    outside Tilt, run
    `kubectl -n topograph rollout restart ds/topograph-node-data-broker`.
-3. **The chart version and the values layout.** Chart 1.0.0 reads top-level
+3. **The chart version and the values layout.** Chart 1.1.0 reads top-level
    `provider` and `engine`, and ignores keys it does not know, such as the
    `global.provider` this file used before. Values it ignores leave it on its
    default `test` provider, with no error. `_CHART_VERSION` in

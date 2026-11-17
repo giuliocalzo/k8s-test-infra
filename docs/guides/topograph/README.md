@@ -52,16 +52,13 @@ flowchart LR
 No node carries a clique label: the only source of the topology is the fabric
 Mokka reports.
 
-<Note>
-**Why a separate `nvidia-smi` DaemonSet**
-
-On a real cluster the broker runs `nvidia-smi` in the GPU Operator's device
-plugin pod. Here a one-container DaemonSet takes that role, so the guide needs
-neither the GPU Operator nor the DRA driver. Mokka's own pod does not work as
-the target: Topograph's exec names no container, so it lands in the
-[NRI plugin](../../components/nri-plugin.md) container, which has no mock
-driver and reports `[N/A]`.
-</Note>
+!!! note "Why a separate `nvidia-smi` DaemonSet"
+    On a real cluster the broker runs `nvidia-smi` in the GPU Operator's device
+    plugin pod. Here a one-container DaemonSet takes that role, so the guide needs
+    neither the GPU Operator nor the DRA driver. Mokka's own pod does not work as
+    the target: Topograph's exec names no container, so it lands in the
+    [NRI plugin](../../components/nri-plugin.md) container, which has no mock
+    driver and reports `[N/A]`.
 
 ## Prerequisites
 
@@ -80,12 +77,6 @@ Each worker gets a fixed node name, so the topology in Step 2 can refer to it.
 cat > kind.yaml <<'EOF'
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-containerdConfigPatches:
-  - |-
-    [plugins."io.containerd.nri.v1.nri"]
-      disable = false
-      disable_connections = false
-      socket_path = "/var/run/nri/nri.sock"
 nodes:
   - role: control-plane
   - role: worker
@@ -122,8 +113,7 @@ nodes:
           name: worker-3
 EOF
 
-kind create cluster --name topograph --config kind.yaml \
-  --image ghcr.io/nvidia/mokka-kind-node:latest
+kind create cluster --name topograph --config kind.yaml
 ```
 
 `mokka.nvidia.com/type=sgpu` marks the simulated-GPU workers. Mokka and
@@ -150,10 +140,12 @@ topology:
       cliques:
         - id: 0
           nodes: [worker-2, worker-3]
+featureGates:
+  IMEXDownload: false # (3)!
 EOF
 
 helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
-  --version 0.5.0 \
+  --version 0.6.0 \
   --namespace mokka --create-namespace \
   -f mokka-values.yaml \
   --wait --timeout 300s
@@ -162,6 +154,9 @@ helm install nvml-mock oci://ghcr.io/nvidia/k8s-test-infra/chart/nvml-mock \
 1. A GB200 profile reports NVLink fabric identity through
    `nvmlDeviceGetGpuFabricInfo`.
 2. Every worker appears in exactly one clique, by node name.
+3. Topograph needs no IMEX. Left on, each node downloads the IMEX archive
+   after it is ready and restages when the download lands; a pod created
+   during that restage gets no mock driver.
 
 ## Step 3 — Give each worker an `nvidia-smi` pod
 
@@ -256,7 +251,7 @@ nodeObserver:
 EOF
 
 helm install topograph topograph \
-  --repo https://dsx-ai-factory.github.io/topograph --version 1.0.0 \
+  --repo https://helm.ngc.nvidia.com/nvidia/topograph --version 1.1.0 \
   --namespace topograph \
   -f topograph-values.yaml \
   --wait --timeout 300s

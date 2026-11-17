@@ -15,16 +15,13 @@ not interchangeable.
 | Pods can be scheduled onto slices | yes | no |
 | Good for | testing schedulers, the device plugin, anything that allocates | testing consumers that read NVML, such as DCGM and GFD |
 
-<Warning>
-**The layout a node boots with is the layout that is allocatable**
+!!! warning "The layout a node boots with is the layout that is allocatable"
 
-
-The device plugin allocates against the driver capability surface, which
-Mokka stages once when the `nvml-mock` pod starts. Repartitioning at
-runtime moves the NVML view underneath it but not that surface, so a
-partition created with `nvidia-smi` can be seen and cannot be allocated.
-Decide the layout at install time if you intend to schedule anything.
-</Warning>
+    The device plugin allocates against the driver capability surface, which
+    Mokka stages once when the `nvml-mock` pod starts. Repartitioning at
+    runtime moves the NVML view underneath it but not that surface, so a
+    partition created with `nvidia-smi` can be seen and cannot be allocated.
+    Decide the layout at install time if you intend to schedule anything.
 
 ## Partition at install time
 
@@ -57,6 +54,7 @@ name, which is what the device plugin's `migStrategy=single` requires:
 | `b200` | `1g.23gb` | 7 |
 | `gb200` | `1g.23gb` | 7 |
 | `gb300` | `1g.35gb` | 7 |
+| `vrnvl72` | `1g.35gb` | 7 |
 
 `l40s` and `t4` cannot partition. The chart refuses MIG on them, and NVML
 answers `NVML_ERROR_NOT_SUPPORTED` exactly as it does on that hardware.

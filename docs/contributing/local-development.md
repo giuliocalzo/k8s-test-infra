@@ -33,14 +33,12 @@ make cluster-delete                         # PROFILE must match creation
 The default shape serves both a single release and a per-worker fleet, so
 switching between them needs no rebuild.
 
-> [!NOTE]
-> **The control-plane node is deliberately excluded**
->
-> `local/nvml-mock.values.yaml` pins the DaemonSet to nodes labelled
-> `mokka.nvidia.com/type=sgpu`. Without that the mock lands on the control
-> plane too — it tolerates every taint — while the GPU Operator, FGO and NFD
-> operands stop at the `NoSchedule` taint. You would get a node advertising a
-> driver nobody consumes.
+!!! note "The control-plane node is deliberately excluded"
+    `local/nvml-mock.values.yaml` pins the DaemonSet to nodes labelled
+    `mokka.nvidia.com/type=sgpu`. Without that the mock lands on the control
+    plane too — it tolerates every taint — while the GPU Operator, FGO and NFD
+    operands stop at the `NoSchedule` taint. You would get a node advertising a
+    driver nobody consumes.
 
 ## Step 2 — start Tilt
 
@@ -52,7 +50,7 @@ Everything else is a flag.
 
 | Flag | Effect |
 |---|---|
-| `--gpu-profile <name>` | Which GPU profile the release uses, instead of the chart's default. One of `a100`, `h100`, `b200`, `gb200`, `gb300`, `l40s`, `t4` |
+| `--gpu-profile <name>` | Which GPU profile the release uses, instead of the chart's default. One of `a100`, `h100`, `b200`, `gb200`, `gb300`, `l40s`, `t4`, `vrnvl72` |
 | `--multi-gpu-profile` | One release per worker instead of one for the fleet: `a100` on `worker-0`, `t4` on `worker-1`. Ignores `--gpu-profile` |
 | `--compute-domain` | GB200 profile with an NVLink topology overlay. Needs the `compute-domain` cluster |
 | `--nvmlmock-image <ref>` | Skip the image build and pin the release to an image you already built, as CI does |
@@ -68,6 +66,7 @@ Everything else is a flag.
 | `--observability` | kube-prometheus-stack and a Grafana dashboard for the mock fleet |
 | `--dynamo` | The NVIDIA Dynamo operator and a `qwen3` inference graph whose mocker worker runs on a mock GPU |
 | `--slinky` | cert-manager, the Slinky slurm-operator and a Slurm cluster with one GPU `slurmd` per mock-GPU worker |
+| `--hami` | [HAMi](https://project-hami.io/docs)'s scheduler, admission webhook and device plugin, plus a manual `hami-smoke` trigger that packs two pods onto one mock GPU |
 | `--control-plane` | The Mokka control-plane image and the `mokka-crds` chart |
 
 ### What composes and what does not
@@ -80,6 +79,7 @@ Most flags stack. These do not:
 | `--fgo` with `--compute-domain` | Different fleet shapes |
 | `--compute-domain` with `--multi-gpu-profile` or `--gpu-profile` | The compute-domain scenario fixes both |
 | `--slinky` with `--dynamo` | `slurmd` claims every mock GPU, so the Dynamo worker could never schedule |
+| `--hami` with `--gpu-operator` (or a flag that implies it) or `--fgo` | Each brings a device plugin that registers `nvidia.com/gpu` |
 
 Four flags imply others: `--topograph` implies `--compute-domain`, because
 cliques only exist there; `--observability` implies `--gpu-operator`, because
@@ -93,6 +93,7 @@ tilt up -- --gpu-operator --dra
 tilt up -- --observability
 tilt up -- --dynamo
 tilt up -- --slinky
+tilt up -- --hami
 
 make cluster-create PROFILE=compute-domain
 tilt up -- --compute-domain --dra

@@ -267,6 +267,20 @@
       }
     },
     "driverVersion": { "type": "string" },
+    "driverBranch": { "type": "string" },
+    "hic": {
+      "type": "array",
+      "description": "Host interface cards nvmlSystemGetHicVersion reports, which is what `nvidia-smi -q -u` prints.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "firmwareVersion": { "type": "string", "minLength": 1 }
+        },
+        "required": ["firmwareVersion"]
+      }
+    },
     "nodeSelector": { "type": "object" },
     "tolerations": { "type": "array" },
     "nodeLabels": {
@@ -311,7 +325,7 @@
         "nriStartupTimeoutSeconds": {
           "type": "integer",
           "minimum": 1,
-          "description": "Maximum seconds the node-agent /stagedz startup probe may fail while its first Stage wave completes before Kubernetes restarts it, when NRI uses native sidecars."
+          "description": "Maximum seconds the node-agent /startedz startup probe may fail while its first Stage and Apply waves complete before Kubernetes restarts it, when NRI uses native sidecars."
         },
         "kernelLog": {
           "type": "object",
@@ -559,7 +573,7 @@
             "networkPolicy": {
               "type": "object",
               "additionalProperties": true,
-              "description": "NetworkPolicy restricting inbound access to the fabric port to peer nvml-mock pods. Rendered only at the full mock InfiniBand tier, the only one that listens on the port. No-op on CNIs that do not enforce NetworkPolicy (e.g. Kind's kindnet).",
+              "description": "NetworkPolicy restricting inbound access to the fabric port to peer nvml-mock pods. Rendered only at the full mock InfiniBand tier, the only one that listens on the port. No-op on CNIs that do not enforce NetworkPolicy. Kind's default kindnet enforces it since Kind v0.24.0.",
               "properties": {
                 "enabled": { "type": "boolean" },
                 "peerNamespaces": {

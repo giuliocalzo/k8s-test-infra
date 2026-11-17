@@ -9,11 +9,13 @@ const YAML = require("yaml");
 const { loadConfig } = require("../src/config.js");
 const { evaluateCI } = require("../src/merge-ci.js");
 const { MAX_API_COLLECTION_ITEMS, MAX_CHANGED_FILES } = require("../src/limits.js");
+const { goldenCases, resultCode } = require("./helpers/merge-ci-golden.js");
+const golden = require("./fixtures/merge-ci/golden-809294d.json");
 
 const HEAD = "a".repeat(40);
 const OLD_HEAD = "b".repeat(40);
 const REPOSITORY = "nvidia/k8s-test-infra";
-const WORKFLOWS = ["basic-checks.yaml", "validate-changelog.yaml", "automation-ci.yml", "helm.yaml", "dependency-integrity.yaml", "fern-docs-ci.yml"];
+const WORKFLOWS = ["basic-checks.yaml", "validate-changelog.yaml", "automation-ci.yml", "helm.yaml", "dependency-integrity.yaml", "deploy-pages.yaml"];
 const requiredCI = loadConfig(path.resolve(__dirname, "../../../..")).policy.merge.requiredCI;
 
 function run(workflow, overrides = {}) {
@@ -49,6 +51,15 @@ function unmappedEvidence(overrides = {}) {
     ...overrides,
   });
 }
+
+test("policy requiredCI reproduces the 809294d hard-coded requirements for every golden case", () => {
+  const cases = goldenCases();
+  assert.deepEqual(cases.map(({ key }) => key), Object.keys(golden));
+  for (const { key, inputs } of cases) {
+    const actual = inputs.map((input) => resultCode(evaluateCI, { ...input, requiredCI })).join("");
+    assert.equal(actual, golden[key], key);
+  }
+});
 
 test("required workflows and checks come from the policy, not a built-in list", () => {
   const basic = { path: ".github/workflows/basic-checks.yaml" };
@@ -260,6 +271,31 @@ test("selects the newest matching workflow by run number then ID regardless of o
   ] })), "FAILED");
 });
 
+test("a cancelled run does not outrank another run of the same workflow on the same head", () => {
+  // Label events in the same second start several runs at once; concurrency keeps an arbitrary one.
+  for (const [status, conclusion, want] of [
+    ["completed", "success", "SUCCESS"], ["in_progress", null, "PENDING"], ["completed", "failure", "FAILED"],
+  ]) {
+    const runs = [
+      run("validate-changelog.yaml", { id: 662, runNumber: 662, conclusion: "cancelled" }),
+      run("validate-changelog.yaml", { id: 663, runNumber: 663, status, conclusion }),
+      run("validate-changelog.yaml", { id: 664, runNumber: 664, conclusion: "cancelled" }),
+      run("basic-checks.yaml"),
+    ];
+    assert.equal(evaluateCI(evidence({ runs })), want);
+    assert.equal(evaluateCI(evidence({ runs: [...runs].reverse() })), want);
+  }
+  assert.equal(evaluateCI(evidence({ runs: [
+    run("validate-changelog.yaml", { id: 662, runNumber: 662, conclusion: "cancelled" }),
+    run("validate-changelog.yaml", { id: 664, runNumber: 664, conclusion: "cancelled" }), run("basic-checks.yaml"),
+  ] })), "FAILED");
+  assert.equal(evaluateCI(evidence({ runs: [
+    run("validate-changelog.yaml", { id: 663, runNumber: 663 }),
+    run("validate-changelog.yaml", { id: 664, runNumber: 664, headOid: OLD_HEAD, conclusion: "cancelled" }),
+    run("basic-checks.yaml", { conclusion: "cancelled" }),
+  ] })), "FAILED");
+});
+
 test("uses the current rerun attempt without allowing newer unrelated runs to hide it", () => {
   assert.equal(evaluateCI(evidence({ runs: [
     run("basic-checks.yaml", { runAttempt: 2, status: "in_progress", conclusion: null }),
@@ -291,12 +327,14 @@ test("requires conditional workflows for changed paths and both sides of renames
     ["hack/actionlint.sh", ["automation-ci.yml"]], ["OWNERS", ["automation-ci.yml"]], ["OWNERS_ALIASES", ["automation-ci.yml"]],
     ["deployments/nvml-mock/helm/Chart.yaml", ["helm.yaml"]], ["deployments/mokka-crds/helm/templates/crd.yaml", ["helm.yaml"]],
     ["go.mod", ["dependency-integrity.yaml"]], ["go.sum", ["dependency-integrity.yaml"]],
-    ["docs/general/overview.md", ["fern-docs-ci.yml"]], ["docs/.internal/file.md", ["fern-docs-ci.yml"]],
-    ["fern/docs.yml", ["fern-docs-ci.yml"]], ["tools/check-docs-mdx", ["fern-docs-ci.yml"]],
-    ["docs/guides/install/aws/eks/terraform/main.tf", ["fern-docs-ci.yml"]],
-    ["Makefile", ["automation-ci.yml", "dependency-integrity.yaml", "fern-docs-ci.yml"]],
+    ["docs/general/overview.md", ["deploy-pages.yaml"]], ["docs/.internal/file.md", ["deploy-pages.yaml"]],
+    ["enhancements/meps/0006-automatic-cdi-setup/README.md", ["deploy-pages.yaml"]],
+    ["hack/mkdocs_meps.py", ["deploy-pages.yaml"]],
+    ["hack/test_mkdocs_meps.py", ["deploy-pages.yaml"]],
+    ["mkdocs.yml", ["deploy-pages.yaml"]], ["requirements-docs.txt", ["deploy-pages.yaml"]],
+    ["Makefile", ["automation-ci.yml", "dependency-integrity.yaml", "deploy-pages.yaml"]],
     [".github/workflows/dependency-integrity.yaml", ["automation-ci.yml", "dependency-integrity.yaml"]],
-    [".github/workflows/fern-docs-ci.yml", ["automation-ci.yml", "fern-docs-ci.yml"]],
+    [".github/workflows/deploy-pages.yaml", ["automation-ci.yml", "deploy-pages.yaml"]],
     ["README.md", []], ["deployments/nvml-mock/manifests/deployment.yaml", []], ["hack/other.sh", []],
   ];
   for (const [changedPath, required] of cases) {
@@ -309,6 +347,13 @@ test("requires conditional workflows for changed paths and both sides of renames
     }
   }
   assert.equal(evaluateCI(evidence({ files: [] })), "SUCCESS");
+});
+
+test("documentation PRs use aggregate workflow success despite a skipped deployment job", () => {
+  assert.equal(evaluateCI(evidence({
+    files: [{ path: "docs/guide.md" }], runs: [...evidence().runs, run("deploy-pages.yaml")],
+    checks: [dco(), dco({ id: 101, appId: 15368, name: "deploy", conclusion: "skipped" })],
+  })), "SUCCESS");
 });
 
 test("required workflow behavior follows tracked pull_request triggers", () => {

@@ -20,6 +20,16 @@ GO_SRC := $(shell find . -type f -name '*.go')
 GO_PKG_DIRS := cmd pkg tests
 
 BIN_DIR=$(PWD)/tmp/bin
+ADDLICENSE ?= $(BIN_DIR)/addlicense
+ADDLICENSE_VERSION ?= v1.2.0
+
+# Keep the check focused on source files. Generated manifests, documentation,
+# dependency metadata, and vendored code use their own licensing conventions.
+# The setup-dgxc-goproxy kit is vendored verbatim and digest-pinned.
+LICENSE_FILES = git ls-files -- '*.go' '*.sh' '*.tiltfile' 'Tiltfile' '*.real' \
+	'**/Makefile' 'Makefile' '**/Dockerfile' '**/Dockerfile.*' '*.Dockerfile' 'Dockerfile*' \
+	':(exclude)vendor' ':(exclude)licenses' ':(exclude)dist' ':(exclude)tmp' \
+	':(exclude).github/actions/setup-dgxc-goproxy'
 
 VERSION := 0.0.1
 
@@ -130,10 +140,9 @@ lint: tools gen-check ## Lint the source code
 	@./hack/check-depproxy-kit.sh
 	@echo "Checking docs/tools against cmd/.."
 	@./hack/check-docs-tools-sync.sh
-# Documentation links are checked here rather than in `make docs-check` because
-# the Fern workflow only validates docs/ and fern/, so every README outside
-# them — where these links actually rot — would get no coverage. `make lint`
-# runs on every PR.
+# Documentation links are checked here rather than in `make docs` because the
+# Pages workflow only triggers on docs/**, so every README outside it — where
+# these links actually rot — would get no coverage. `make lint` runs on every PR.
 	@echo "🔗 Checking documentation links.."
 	@./hack/check-doc-links.sh
 	@echo "🧹 Vetting.."
@@ -176,7 +185,7 @@ gen: tools ## Generate machine-controlled code
 	@go mod download $(GO_NVML_MOD)
 	@GO_NVML_DIR=$$(go list -m -f '{{.Dir}}' $(GO_NVML_MOD)) go generate ./pkg/gpu/mocknvml/bridge/...
 	@echo "Generating deepcopy for $(API_PKG_PATH).."
-	@$(BIN_DIR)/controller-gen object paths="$(API_PKG_PATH)"
+	@$(BIN_DIR)/controller-gen object:headerFile=hack/boilerplate.go.txt paths="$(API_PKG_PATH)"
 	@echo "Generating CRD manifests into $(CRDS_OUT).."
 	@mkdir -p $(CRDS_OUT)
 	@$(BIN_DIR)/controller-gen crd:allowDangerousTypes=true \
@@ -234,6 +243,10 @@ mokka-image: ## Build the main Mokka image (node daemon and mock libraries): mak
 		--build-arg GOLANG_VERSION=$(shell ./hack/golang-version.sh) \
 		--tag "$(MOKKA_IMAGE)" \
 		.
+
+.PHONY: nvidia-smi-smoke
+nvidia-smi-smoke: ## Run every nvidia-smi the image bundles against its mock NVML, no cluster: make nvidia-smi-smoke [MOKKA_IMAGE=repo:tag]
+	./hack/nvidia-smi-smoke.sh "$(MOKKA_IMAGE)"
 
 .PHONY: mokka-control-plane-publish mokka-control-plane-image-push
 .PHONY: mokka-control-plane-image-sign mokka-control-plane-image-sbom
@@ -458,6 +471,14 @@ mokka-control-plane-image-attest: ## Attest each Mokka control-plane child manif
 test: ## Run unit tests with race detection and coverage
 	@$(GO_CMD) test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
+.PHONY: license-fmt
+license-fmt: addlicense ## Add Apache-2.0 headers to tracked source files missing them.
+	@$(LICENSE_FILES) | xargs -r $(ADDLICENSE) -c "NVIDIA CORPORATION" -l apache -y 2026
+
+.PHONY: license-header-check
+license-header-check: addlicense ## Verify tracked source files contain license headers.
+	@$(LICENSE_FILES) | xargs -r $(ADDLICENSE) -check -c "NVIDIA CORPORATION" -l apache
+
 # internal/fsutil and internal/agent/gpudriver skip their bind-mount, mknod
 # and Stage tests outside root on Linux (skipUnlessRootLinux) — the `test`
 # target above always runs as the invoking user, so those never execute
@@ -497,7 +518,9 @@ crd-docs: ## Generate the Control Plane API reference documentation
 		--renderer markdown \
 		--output-mode single \
 		--max-depth 20
-	perl -0pe 's/\n+\z/\n/' docs/out.md > docs/crd-reference.md
+	awk 'BEGIN { print "<!--"; print "SPDX-License-Identifier: Apache-2.0"; print "SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION"; print "-->"; print "" } { print }' docs/out.md > docs/crd-reference.md.tmp
+	perl -0pi -e 's/\n+\z/\n/' docs/crd-reference.md.tmp
+	mv docs/crd-reference.md.tmp docs/crd-reference.md
 	unlink docs/out.md
 
 # Drives the built libnvidia-ml.so through go-nvml over the real C ABI.
@@ -551,6 +574,13 @@ verify-greptile: ## Validate the .greptile review configuration
 .PHONY: actionlint
 actionlint: ## Validate GitHub Actions workflows
 	@./hack/actionlint.sh
+
+.PHONY: addlicense
+addlicense: $(ADDLICENSE) ## Download addlicense locally if necessary.
+
+$(ADDLICENSE):
+	@mkdir -p "$(BIN_DIR)"
+	@GOBIN="$(abspath $(BIN_DIR))" $(GO_CMD) install github.com/google/addlicense@$(ADDLICENSE_VERSION)
 
 REPOSITORY_AUTOMATION_DIR := .github/actions/repo-automation
 
@@ -626,6 +656,11 @@ changelog-preview: changie ## Preview the next release section without writing: 
 changelog-release: changie ## Maintainers: fold unreleased fragments into CHANGELOG.md as RELEASE_VERSION
 	@test -n "$(RELEASE_VERSION)" || { echo "RELEASE_VERSION is required, e.g. make changelog-release RELEASE_VERSION=0.5.0"; exit 1; }
 	@CHANGIE=$(CHANGIE) bash hack/changelog-fold.sh $(RELEASE_VERSION)
+
+.PHONY: verify-release
+verify-release: ## Maintainers: verify a published release's runs, images, charts and signatures: make verify-release RELEASE_VERSION=0.5.0
+	@test -n "$(RELEASE_VERSION)" || { echo "RELEASE_VERSION is required, e.g. make verify-release RELEASE_VERSION=0.5.0"; exit 1; }
+	@bash hack/verify-release.sh $(RELEASE_VERSION)
 
 .PHONY: helm-crds-tests
 helm-crds-tests: ## Lint + template-render the mokka-crds chart
@@ -703,7 +738,7 @@ image-load:
 # scope with E2E_PROFILES / E2E_GINKGO_FLAGS. Examples:
 #   make e2e                       # gb200
 #   make e2e E2E_PROFILES=a100     # fast inner loop, single profile
-#   make e2e E2E_GINKGO_FLAGS='--label-filter="nvidia-smi || nvlink"'
+#   make e2e E2E_GINKGO_FLAGS='--label-filter="(nvidia-smi || nvlink) && !dra && !gpu-operator && !multi-node && !nri && !nfd && !mig && !dra-compute-domain && !vgpu"'
 #   make e2e-dra                   # DRA scenario
 #   make e2e-compute-domain        # ComputeDomains through the DRA driver (two-rack cluster)
 #   make e2e-gpu-operator          # GPU Operator scenario
@@ -712,6 +747,8 @@ image-load:
 #   make e2e-nfd                   # NFD label-provenance scenario
 #   make e2e-mig                   # MIG scenario, device plugin in migStrategy=single
 #   make e2e-vgpu                  # vGPU host and guest scenario
+# E2E_GINKGO_FLAGS replaces the default filter. Shared check labels span
+# scenarios; keep the exclusions above for a standalone subset.
 # CI builds the image once per run. Every leg loads it into Kind and sets
 # E2E_IMAGE to that ref. The reshaping scenarios set the DaemonSet to this ref.
 #
@@ -734,7 +771,7 @@ E2E_GINKGO_FLAGS ?= --label-filter='$(E2E_DEFAULT_LABEL_FILTER)'
 # so on a developer machine this recipe otherwise returns tee's status and a
 # failed suite exits 0 — see issue #560 and tests/makefile/makefile_test.go.
 e2e: ## Run the Ginkgo e2e suite against E2E_CLUSTER_NAME/E2E_KUBE_CONTEXT (default mokka/kind-mokka); scope with E2E_PROFILES / E2E_GINKGO_FLAGS
-	set -o pipefail; $(GINKGO) --tags=e2e -v --timeout=$(E2E_TIMEOUT) $(E2E_GINKGO_FLAGS) ./tests/e2e/go | tee e2e.log
+	set -o pipefail; $(GINKGO) --tags=e2e -v --timeout=$(E2E_TIMEOUT) --fail-on-empty $(E2E_GINKGO_FLAGS) ./tests/e2e/go | tee e2e.log
 
 e2e-dra: ## e2e — DRA scenario
 	$(MAKE) e2e E2E_GINKGO_FLAGS='--label-filter=dra'
@@ -776,57 +813,83 @@ e2e-vgpu: ## e2e — vGPU host and guest scenario
 
 ##@ Documentation
 
-# The docs site is Fern. CI calls these same targets so a failure reproduces
-# locally with one command. The Fern CLI is deliberately unpinned; install it
-# with `npm install -g fern-api@latest`.
-FERN ?= fern
+# The docs site is MkDocs Material. CI calls these same targets so a failure
+# reproduces locally with one command.
+MKDOCS ?= mkdocs
 
-# Pages under docs/ that docs/index.yml does not list. They are GitHub-rendered
-# markdown for contributors, or demos that need a repository clone, so they use
-# syntax Fern's MDX parser rejects (autolinks, HTML comments, GitHub alerts).
-# Keep this in step with what docs/index.yml omits. Paths are relative to a docs
-# root.
-DOCS_UNPUBLISHED_PAGES := \
-	contributing/* \
-	maintainers/* \
-	tools/check-fabric.md \
-	tools/generate-bridge.md \
-	guides/compute-domain/* \
-	guides/nv-sentinel/* \
-	guides/failure-injection/*
+# uv manages the toolchain, installed from the pinned requirements-docs.txt.
+# It goes into a project-local virtualenv rather than the system interpreter:
+# `uv pip install` refuses a non-virtual environment outright, and --system
+# resolves whichever interpreter uv happens to find first (an Xcode python3.9
+# on macOS) or trips Debian's externally-managed marker on the CI runner.
+# Naming the venv sidesteps both.
+UV                  ?= uv
+DOCS_VENV           ?= $(CURDIR)/.venv-docs
+DOCS_PYTHON_VERSION ?= 3.12
 
-# A registered docs version is a copy of docs/ frozen at its tag (see
-# tools/restore-docs-versions), and the checks scan fern/ too, so every
-# exclusion has to hold under each copy as well as under docs/.
-DOCS_ROOTS := docs fern/versions/*-content
-DOCS_UNPUBLISHED := $(foreach root,$(DOCS_ROOTS),$(foreach page,$(DOCS_UNPUBLISHED_PAGES),--exclude '$(root)/$(page)'))
-# Sample manifests are not pages and Fern never parses them.
-DOCS_SAMPLES := $(foreach root,$(DOCS_ROOTS),--exclude '$(root)/*.yaml')
+# Put the venv ahead of PATH for the build targets instead of asking anyone to
+# activate it. The entry is inert when the venv is absent, so `make docs` still
+# works for someone who has mkdocs on PATH by other means.
+DOCS_PATH := PATH="$(DOCS_VENV)/bin:$$PATH"
 
-# fern/ builds the released versions only. This copy of it builds docs/ as the
-# next release will ship it (see tools/unreleased-docs-config).
-DOCS_UNRELEASED := tmp/docs-unreleased
+.PHONY: docs-deps docs-build docs-serve docs-test docs-check-exclusion docs managed-eks-terraform-check
 
-.PHONY: docs-check docs-check-paths docs-serve docs-unreleased docs-versions
+# Missing uv is a hard failure, not a pip fallback. A fallback would let CI and
+# a developer resolve different interpreters while both report success, which is
+# the divergence the pinned manifest exists to prevent.
+# --clear because `uv venv` refuses to write over an existing environment, so
+# without it this target succeeds once and then fails on every re-run, which
+# is also how it would behave for anyone who already had a .venv-docs.
+docs-deps: ## Install the pinned MkDocs toolchain into .venv-docs using uv
+	@command -v $(UV) >/dev/null 2>&1 || { \
+		echo "ERROR: uv not found on PATH. The docs toolchain is managed with uv."; \
+		echo "  Install it with:  brew install uv"; \
+		echo "               or:  curl -LsSf https://astral.sh/uv/install.sh | sh"; \
+		echo "  Docs: https://docs.astral.sh/uv/getting-started/installation/"; \
+		exit 1; \
+	}
+	$(UV) venv --clear --python $(DOCS_PYTHON_VERSION) $(DOCS_VENV)
+	$(UV) pip install --python $(DOCS_VENV) -r requirements-docs.txt
+	@echo "MkDocs installed into $(DOCS_VENV); make docs picks it up with no activation."
 
-docs-versions: ## Restore each registered docs version from its git tag into fern/versions/
-	./tools/restore-docs-versions
+docs-test: ## Test virtual MEP publishing without network or a cluster
+	$(DOCS_PATH) python hack/test_mkdocs_meps.py
 
-docs-unreleased: ## Write the Fern config that builds docs/ without the released versions
-	python3 tools/unreleased-docs-config $(DOCS_UNRELEASED)
+docs-build: ## Build the documentation site (strict: broken links fail)
+	$(DOCS_PATH) $(MKDOCS) build --strict
 
-# Fern reads any local file a page names, so a page that points outside docs/
-# could read runner files. The Fern workflows run this before they use
-# FERN_TOKEN, from a trusted checkout, so it is a target of its own.
-docs-check-paths: ## Reject docs page paths that leave docs/ (see tools/check-docs-paths)
-	python3 tools/check-docs-paths --allow '../docs/index.yml' $(DOCS_SAMPLES) $(DOCS_UNPUBLISHED) docs fern
+docs-serve: ## Serve the documentation site locally on :8000
+	$(DOCS_PATH) $(MKDOCS) serve
 
-docs-check: docs-versions docs-unreleased docs-check-paths ## Validate the docs: MDX safety, page paths, Fern config, MDX validity and internal links
-	python3 tools/check-docs-mdx $(DOCS_UNPUBLISHED) docs fern
-	@for dir in fern $(DOCS_UNRELEASED)/fern; do \
-		echo "Checking the site built by $${dir}/docs.yml"; \
-		(cd "$${dir}" && $(FERN) check && $(FERN) docs md check && $(FERN) docs broken-links --strict) || exit 1; \
-	done
+# docs/plans/ and docs/superpowers/ are gitignored scratch directories, so they
+# are absent in CI and grepping the built site for them would pass no matter
+# what. Plant a file and prove exclude_docs drops it, so this fails if that
+# config is removed.
+docs-check-exclusion: ## Verify gitignored internal plans cannot reach the site
+	@set -eu; \
+	export PATH="$(DOCS_VENV)/bin:$$PATH"; \
+	mkdir -p "$(CURDIR)/tmp"; \
+	canary=$$(mktemp -d "$(CURDIR)/tmp/docs-canary.XXXXXX"); \
+	trap 'rm -rf -- "$$canary"' EXIT; \
+	cp -R docs "$$canary/docs"; \
+	mkdir -p "$$canary/docs/plans" "$$canary/docs/superpowers"; \
+	printf '# Internal\n\nPAGES_EXCLUSION_CANARY\n' > "$$canary/docs/plans/_canary.md"; \
+	cp "$$canary/docs/plans/_canary.md" "$$canary/docs/superpowers/_canary.md"; \
+	printf 'INHERIT: %s/mkdocs.yml\ndocs_dir: %s/docs\nsite_dir: %s/site\nhooks: [%s/hack/mkdocs_meps.py]\nwatch: [%s/enhancements/meps]\n' "$(CURDIR)" "$$canary" "$$canary" "$(CURDIR)" "$(CURDIR)" > "$$canary/mkdocs.yml"; \
+	$(MKDOCS) build --strict --config-file "$$canary/mkdocs.yml" >/dev/null; \
+	if grep -rq 'PAGES_EXCLUSION_CANARY' "$$canary/site"/; then \
+		echo "ERROR: docs/plans/ leaked into the site; check exclude_docs in mkdocs.yml"; \
+		exit 1; \
+	fi; \
+	echo "exclude_docs verified: internal plans are not published"
 
-docs-serve: docs-unreleased ## Serve docs/ as the next release locally on :3000
-	cd $(DOCS_UNRELEASED) && $(FERN) docs dev
+docs: docs-test docs-check-exclusion docs-build ## Verify exclusion then build the site
+
+MANAGED_EKS_TERRAFORM_DIR := docs/guides/install/aws/eks/terraform
+TERRAFORM                 ?= terraform
+
+managed-eks-terraform-check: ## Format and validate the managed EKS Terraform without AWS credentials
+	$(TERRAFORM) -chdir=$(MANAGED_EKS_TERRAFORM_DIR) fmt -check -recursive
+	TF_IN_AUTOMATION=1 $(TERRAFORM) -chdir=$(MANAGED_EKS_TERRAFORM_DIR) init \
+		-backend=false -input=false -lockfile=readonly
+	TF_IN_AUTOMATION=1 $(TERRAFORM) -chdir=$(MANAGED_EKS_TERRAFORM_DIR) validate

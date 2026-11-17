@@ -57,9 +57,9 @@ helm upgrade nvml-mock \
     --set gpu.profile=a100
 ```
 
-Seven profiles ship with the chart: `a100`, `b200`, `gb200`, `gb300`, `h100`,
-`l40s` and `t4`. [Configuration](configuration.md) covers what each one defines
-and how to change individual values.
+Eight profiles ship with the chart: `a100`, `b200`, `gb200`, `gb300`, `h100`,
+`l40s`, `t4` and `vrnvl72`. [Configuration](configuration.md) covers what each one
+defines and how to change individual values.
 
 ## Clean up
 
@@ -76,7 +76,7 @@ real software at it.
 | To do this | Go to |
 |---|---|
 | Schedule GPU workloads with the device plugin, DRA or the GPU Operator | [Installation](helm-chart.md) |
-| Break a GPU and watch consumers react | [Failure injection](https://github.com/NVIDIA/k8s-test-infra/blob/main/docs/guides/failure-injection/README.md) |
+| Break a GPU and watch consumers react | [Failure injection](guides/failure-injection/README.md) |
 | Check that GPU workloads get the mock driver | [Set up NRI injection](guides/nri-injection.md) |
 | Change temperature, power or health on a running node | [Runtime control](nvml-mock-ctl.md) |
 | Understand what is actually happening | [Architecture](architecture.md) |

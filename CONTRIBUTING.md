@@ -86,13 +86,13 @@ Missing, outdated, or incorrect documentation has its own
 6. **Rebase only on a conflict**: a pull request that is behind `main` still
    merges. Rebase only when it has the `needs-rebase` label, because every push
    dismisses approvals and `lgtm`. See
-   [Pull Requests](docs/contributing/pull-requests.md#rebase-only-on-a-conflict)
+   [Pull Requests](https://nvidia.github.io/k8s-test-infra/contributing/pull-requests/#rebase-only-on-a-conflict)
 
 ## Changelog
 
 Do not edit `CHANGELOG.md`. Record the entry as a fragment with
 `make changelog` and commit it with your change; see
-[Changelog entries](docs/contributing/pull-requests.md#changelog-entries).
+[Changelog entries](https://nvidia.github.io/k8s-test-infra/contributing/pull-requests/#changelog-entries).
 
 ## Testing
 
@@ -135,6 +135,9 @@ All commits must be signed off per the
 Add a sign-off line to every git commit message:
 
     Signed-off-by: Your Name <your.email@example.com>
+
+Merge commits, such as the one GitHub's **Update branch** button creates, are
+exempt. Every other commit in the pull request still needs a sign-off.
 
 Use your real name. If you set `user.name` and `user.email` in your git config,
 you can sign automatically with:

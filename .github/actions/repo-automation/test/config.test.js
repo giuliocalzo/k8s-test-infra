@@ -184,15 +184,15 @@ test("declares the required CI that merge-ci.js hard-coded at 809294d", () => {
       },
       {
         path: ".github/workflows/helm.yaml",
-        files: ["deployments/nvml-mock/helm/**", "deployments/mokka-crds/helm/**"],
+        files: [".github/workflows/helm.yaml", "deployments/nvml-mock/helm/**", "deployments/mokka-crds/helm/**"],
       },
       {
         path: ".github/workflows/dependency-integrity.yaml",
         files: ["go.mod", "go.sum", "Makefile", ".github/workflows/dependency-integrity.yaml"],
       },
       {
-        path: ".github/workflows/fern-docs-ci.yml",
-        files: ["docs/**", "fern/**", "tools/**", "Makefile", ".github/workflows/fern-docs-ci.yml"],
+        path: ".github/workflows/deploy-pages.yaml",
+        files: ["docs/**", "enhancements/**", "hack/mkdocs_meps.py", "hack/test_mkdocs_meps.py", "mkdocs.yml", "requirements-docs.txt", "Makefile", ".github/workflows/deploy-pages.yaml"],
       },
     ],
     checks: [{ name: "DCO", appId: 1861 }],

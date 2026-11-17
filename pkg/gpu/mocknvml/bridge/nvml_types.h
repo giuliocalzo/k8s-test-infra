@@ -155,6 +155,14 @@ typedef struct nvmlMemory_v2_st
     unsigned long long used;         //!< Allocated device memory (in bytes)
 } nvmlMemory_v2_t;
 
+/* NVML CUDA 13.4 input used by the container toolkit's memory-limit hook. */
+typedef struct nvmlSetMemoryLimits_v1_st
+{
+    const char *nameSpace;
+    unsigned long long softLimit;
+    unsigned long long hardLimit;
+} nvmlSetMemoryLimits_v1_t;
+
 /*
  * Device architecture type
  */
@@ -1265,6 +1273,56 @@ struct nvmlMarginTemperature_st
 };
 
 /*
+ * Memory repair and DRAM encryption structs (issue #1040). The bridge reads
+ * their version tags and writes their fields into the caller's allocation, so
+ * the layouts must match the upstream header; the asserts below and
+ * ecc_repair_layout_test.go pin them against go-nvml's.
+ */
+struct nvmlRepairStatus_st
+{
+    unsigned int version;                //!< IN: NVML_STRUCT_VERSION(RepairStatus, 1)
+    unsigned int bChannelRepairPending;  //!< OUT: a channel repair waits for the next reset
+    unsigned int bTpcRepairPending;      //!< OUT: a TPC repair waits for the next reset
+};
+
+struct nvmlUnrepairableMemoryStatus_v1_st
+{
+    unsigned int bUnrepairableMemory;    //!< OUT: the memory has a fault only a replacement fixes
+};
+
+struct nvmlDramEncryptionInfo_st
+{
+    unsigned int      version;           //!< IN: NVML_STRUCT_VERSION(DramEncryptionInfo, 1)
+    nvmlEnableState_t encryptionState;   //!< IN/OUT: DRAM encryption state
+};
+
+typedef struct
+{
+    unsigned int unit;
+    unsigned int location;
+    unsigned int sublocation;
+    unsigned int extlocation;
+    unsigned int address;
+    unsigned int isParity;
+    unsigned int count;
+} nvmlEccSramUniqueUncorrectedErrorEntry_v1_t;
+
+struct nvmlEccSramUniqueUncorrectedErrorCounts_st
+{
+    unsigned int version;                                  //!< IN: NVML_STRUCT_VERSION(EccSramUniqueUncorrectedErrorCounts, 1)
+    unsigned int entryCount;                               //!< IN/OUT: capacity in, entries needed out
+    nvmlEccSramUniqueUncorrectedErrorEntry_v1_t *entries;  //!< caller-supplied buffer, or NULL to probe the size
+};
+
+_Static_assert(sizeof(struct nvmlRepairStatus_st) == 12, "nvmlRepairStatus_t must stay 12 bytes");
+_Static_assert(sizeof(struct nvmlUnrepairableMemoryStatus_v1_st) == 4, "nvmlUnrepairableMemoryStatus_v1_t must stay 4 bytes");
+_Static_assert(sizeof(struct nvmlDramEncryptionInfo_st) == 8, "nvmlDramEncryptionInfo_t must stay 8 bytes");
+_Static_assert(sizeof(nvmlEccSramUniqueUncorrectedErrorEntry_v1_t) == 28, "the SRAM unique error entry must stay 28 bytes");
+_Static_assert(sizeof(struct nvmlEccSramUniqueUncorrectedErrorCounts_st) == 16 &&
+               offsetof(struct nvmlEccSramUniqueUncorrectedErrorCounts_st, entries) == 8,
+               "nvmlEccSramUniqueUncorrectedErrorCounts_t must stay 16 bytes with entries at offset 8");
+
+/*
  * powerScope is unsigned char upstream, so the trailing powerValueMw sits at
  * offset 8 behind three bytes of padding. Spelling the type out (rather than
  * widening it to unsigned int) is what keeps that offset where a caller built
@@ -1437,6 +1495,82 @@ typedef struct nvmlNvlinkSetBwModeAsync_v1_st                           nvmlNvli
 typedef struct nvmlNvlinkTelemetrySamples_v1_st                         nvmlNvlinkTelemetrySamples_v1_t;
 typedef struct nvmlPerfMetricsSamples_v1_st                             nvmlPerfMetricsSamples_v1_t;
 typedef struct nvmlSetMemoryLimits_v1_st                                nvmlSetMemoryLimits_v1_t;
+
+/*
+ * Completed bodies for the system event set, HIC, driver branch and hostname
+ * types. The forward declarations earlier in this header only name the
+ * typedefs; these complete the struct tags so the bridge can read and write
+ * their fields. Layouts mirror go-nvml's pkg/nvml/nvml.h (v1). `version` is an
+ * input the caller stamps with the NVML_STRUCT_VERSION macro; the bridge
+ * accepts any value because go-nvml stamps it on the caller's behalf.
+ */
+#define NVML_SYSTEM_DRIVER_VERSION_BUFFER_SIZE 80
+#define NVML_DEVICE_HOSTNAME_BUFFER_SIZE 64
+
+/*
+ * The only two system event types NVML defines. Unlike the per-device event
+ * mask these are driver bind / unbind transitions, not Xid classes.
+ */
+#define nvmlSystemEventTypeGpuDriverUnbind 0x0000000000000001LL
+#define nvmlSystemEventTypeGpuDriverBind   0x0000000000000002LL
+#define nvmlSystemEventTypeCount 2
+
+typedef struct
+{
+    struct nvmlSystemEventSet_st* handle;
+} nvmlSystemEventSet_t;
+
+typedef struct
+{
+    unsigned long long eventType; //!< OUT: which system event occurred
+    unsigned int       gpuId;     //!< OUT: gpuId in PCI format
+} nvmlSystemEventData_v1_t;
+
+struct nvmlSystemEventSetCreateRequest_st
+{
+    unsigned int         version; //!< IN: NVML_STRUCT_VERSION(SystemEventSetCreateRequest, 1)
+    nvmlSystemEventSet_t set;     //!< OUT: the created system event set
+};
+
+struct nvmlSystemEventSetFreeRequest_st
+{
+    unsigned int         version; //!< IN: NVML_STRUCT_VERSION(SystemEventSetFreeRequest, 1)
+    nvmlSystemEventSet_t set;     //!< IN: the system event set to release
+};
+
+struct nvmlSystemRegisterEventRequest_st
+{
+    unsigned int         version;    //!< IN: NVML_STRUCT_VERSION(SystemRegisterEventRequest, 1)
+    unsigned long long   eventTypes; //!< IN: bitmask of nvmlSystemEventType* to record
+    nvmlSystemEventSet_t set;        //!< IN: set the event types are added to
+};
+
+struct nvmlSystemEventSetWaitRequest_st
+{
+    unsigned int              version;   //!< IN/OUT: NVML_STRUCT_VERSION(SystemEventSetWaitRequest, 1)
+    unsigned int              timeoutms; //!< IN: milliseconds to block; 0 polls
+    nvmlSystemEventSet_t      set;       //!< IN: system event set to wait on
+    nvmlSystemEventData_v1_t *data;      //!< IN/OUT: caller-owned event array
+    unsigned int              dataSize;  //!< IN: number of entries in data
+    unsigned int              numEvent;  //!< OUT: number of events collected
+};
+
+struct nvmlHwbcEntry_st
+{
+    unsigned int hwbcId;             //!< OUT: host interface card id
+    char         firmwareVersion[32]; //!< OUT: HIC firmware version string
+};
+
+struct nvmlSystemDriverBranchInfo_st
+{
+    unsigned int version;                                        //!< IN: NVML_STRUCT_VERSION(SystemDriverBranchInfo, 1)
+    char         branch[NVML_SYSTEM_DRIVER_VERSION_BUFFER_SIZE];  //!< OUT: driver branch
+};
+
+struct nvmlHostname_v1_st
+{
+    char value[NVML_DEVICE_HOSTNAME_BUFFER_SIZE]; //!< IN/OUT: NUL-terminated hostname
+};
 
 #ifdef __cplusplus
 }
